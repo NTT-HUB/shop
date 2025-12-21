@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Login</title>
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header>
+  <h1>LOGIN</h1>
+</header>
+
+<div class="container">
+  <div class="box">
+    <input id="username" placeholder="Username">
+    <input id="password" type="password" placeholder="Password">
+    <button onclick="login()">Đăng nhập</button>
+    <p><a href="register.html">Tạo tài khoản</a></p>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+<script>
+async function login() {
+  const res = await apiPost("/api/auth/login", {
+    username: username.value,
+    password: password.value
+  });
+  if (res.ok) location.href = "dashboard.html";
+  else alert(res.error);
+}
+</script>
+</body>
+</html>
