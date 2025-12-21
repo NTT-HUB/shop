@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Sản phẩm</title>
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header>
+  <h1 id="t"></h1>
+</header>
+
+<div class="container">
+  <div class="box">
+    <p>Giá: <b id="p"></b></p>
+    <p>Người bán: <b id="s"></b></p>
+    <button onclick="buy()">Mua</button>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+<script>
+const id = new URLSearchParams(location.search).get("id");
+async function load() {
+  const d = await apiGet("/api/listings/" + id);
+  t.innerText = d.item.title;
+  p.innerText = d.item.price_cents / 100 + " đ";
+  s.innerText = d.item.seller_username;
+}
+async function buy() {
+  const r = await apiPost("/api/orders", { listing_id: id, quantity: 1 });
+  if (r.ok) alert("Mua thành công");
+  else alert(r.error);
+}
+load();
+</script>
+</body>
+</html>
