@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Dashboard</title>
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header>
+  <h1>DASHBOARD</h1>
+  <nav>
+    <a href="create.html">Đăng bán</a>
+    <a href="#" onclick="logout()">Logout</a>
+  </nav>
+</header>
+
+<div class="container">
+  <div class="box">
+    <p>User: <b id="u"></b></p>
+    <p>Số dư: <b id="b"></b></p>
+    <p>Uy tín: <b id="r"></b></p>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+<script>
+async function load() {
+  const r = await fetch(API + "/api/me", { credentials: "include" });
+  if (r.status === 401) return location.href = "login.html";
+  const d = await r.json();
+  u.innerText = d.user.username;
+  b.innerText = d.balance_cents / 100 + " đ";
+  rEl.innerText = d.user.reputation;
+}
+async function logout() {
+  await apiPost("/api/auth/logout", {});
+  location.href = "login.html";
+}
+const rEl = document.getElementById("r");
+load();
+</script>
+</body>
+</html>
