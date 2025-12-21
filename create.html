@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Đăng bán</title>
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header>
+  <h1>ĐĂNG BÁN</h1>
+</header>
+
+<div class="container">
+  <div class="box">
+    <select id="kind">
+      <option value="product">Sản phẩm</option>
+      <option value="ac">Tài khoản (AC)</option>
+    </select>
+    <input id="title" placeholder="Tên">
+    <input id="price" placeholder="Giá (VND)">
+    <input id="qty" placeholder="Số lượng">
+    <input id="contact" placeholder="Link liên hệ">
+    <textarea id="secret" placeholder="Nội dung AC (nếu có)"></textarea>
+    <button onclick="create()">Đăng</button>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+<script>
+async function create() {
+  const res = await apiPost("/api/listings", {
+    kind: kind.value,
+    title: title.value,
+    price_cents: price.value * 100,
+    quantity: qty.value || 1,
+    contact_link: contact.value,
+    ac_secret_txt: secret.value
+  });
+  if (res.ok) {
+    alert("Đăng bán thành công");
+    location.href = "dashboard.html";
+  } else alert(res.error);
+}
+</script>
+</body>
+</html>
