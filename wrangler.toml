@@ -1,0 +1,20 @@
+name = "api-shop"
+main = "api.js"
+compatibility_date = "2025-12-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "web"
+database_id = "8e5789d0-d871-45a2-bf01-9321063b8097"
+
+# (optional) nếu dùng R2 sau
+# [[r2_buckets]]
+# binding = "BUCKET"
+# bucket_name = "ma-shop-images"
+
+[vars]
+SESSION_MAX_AGE_SEC = "2592000" # 30 ngày
+
+# secrets (set bằng wrangler secret put ...)
+# PASSWORD_PEPPER
+# AES_SECRET (nếu sau này mã hoá file txt AC),
