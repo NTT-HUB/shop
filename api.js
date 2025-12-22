@@ -31,6 +31,46 @@ export default {
         );
       }
 
+      // ===== DEV TOPUP (TEST ONLY) =====
+if (path === "/api/dev/topup" && req.method === "POST") {
+  const u = await requireAuth(req, env);
+  if (!u) return withCors(bad("Unauthorized", 401));
+
+  const body = await readJson(req);
+  const amount = Number(body?.amount_cents || 0);
+  if (amount <= 0) return withCors(bad("Invalid amount"));
+
+  const now = Date.now();
+
+  await env.DB.prepare(
+    "UPDATE wallets SET balance_cents = balance_cents + ?, updated_at=? WHERE user_id=?"
+  ).bind(amount, now, u.userId).run();
+
+  await env.DB.prepare(
+    `INSERT INTO wallet_ledger (id, user_id, type, amount_cents, ref_type, note, created_at)
+     VALUES (?, ?, 'adjustment', ?, 'dev', 'Dev topup', ?)`
+  ).bind(crypto.randomUUID(), u.userId, amount, now).run();
+
+  return withCors(ok({ amount_cents: amount }));
+}
+
+// ===== LEDGER HISTORY =====
+if (path === "/api/ledger" && req.method === "GET") {
+  const u = await requireAuth(req, env);
+  if (!u) return withCors(bad("Unauthorized", 401));
+
+  const rows = await env.DB.prepare(
+    `SELECT type, amount_cents, note, created_at
+     FROM wallet_ledger
+     WHERE user_id=?
+     ORDER BY created_at DESC
+     LIMIT 100`
+  ).bind(u.userId).all();
+
+  return withCors(ok({ items: rows.results || [] }));
+}
+
+
       // -------- AUTH --------
       if (path === "/api/auth/register" && req.method === "POST") {
         const body = await readJson(req);
@@ -154,6 +194,26 @@ export default {
 
         return withCors(ok({ user, balance_cents: wallet?.balance_cents ?? 0 }));
       }
+
+// ===== MY ORDERS =====
+if (path === "/api/my/orders" && req.method === "GET") {
+  const u = await requireAuth(req, env);
+  if (!u) return withCors(bad("Unauthorized", 401));
+
+  const rows = await env.DB.prepare(
+    `SELECT o.id, o.subtotal_cents, o.status, o.created_at,
+            l.title, l.kind, l.contact_link,
+            u.username AS seller_username
+     FROM orders o
+     JOIN listings l ON l.id=o.listing_id
+     JOIN users u ON u.id=o.seller_id
+     WHERE o.buyer_id=?
+     ORDER BY o.created_at DESC`
+  ).bind(u.userId).all();
+
+  return withCors(ok({ items: rows.results || [] }));
+}
+
 
       // -------- LISTINGS --------
       if (path === "/api/listings" && req.method === "GET") {
@@ -381,6 +441,39 @@ export default {
         if (order.buyer_id !== u.userId && order.seller_id !== u.userId && u.role !== "admin") {
           return withCors(bad("Forbidden", 403));
         }
+
+// ===== AUTO TRUST FOR AC AFTER 3 MINUTES =====
+const listingInfo = await env.DB.prepare(
+  "SELECT kind FROM listings WHERE id=?"
+).bind(order.listing_id).first();
+
+if (listingInfo?.kind === "ac") {
+  const deadline = order.created_at + 3 * 60 * 1000;
+
+  if (Date.now() > deadline && order.status === "paid") {
+    const fb = await env.DB.prepare(
+      "SELECT order_id FROM feedback WHERE order_id=?"
+    ).bind(order.id).first();
+
+    if (!fb) {
+      // auto trust
+      await env.DB.prepare(
+        `INSERT INTO feedback (order_id, buyer_id, seller_id, type, note, created_at)
+         VALUES (?, ?, ?, 'trust', 'Auto trust (AC warranty expired)', ?)`
+      ).bind(
+        order.id,
+        order.buyer_id,
+        order.seller_id,
+        Date.now()
+      ).run().catch(() => {});
+
+      await env.DB.prepare(
+        "UPDATE users SET reputation = reputation + 1, updated_at=? WHERE id=?"
+      ).bind(Date.now(), order.seller_id).run().catch(() => {});
+    }
+  }
+}
+
         return withCors(ok({ order }));
       }
 
@@ -615,9 +708,8 @@ function getCookie(req, name) {
 }
 
 function setCookie(name, value, maxAgeSec) {
-  return `${name}=${encodeURIComponent(value)}; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=${maxAgeSec}`;
+  return `${name}=${encodeURIComponent(value)}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${maxAgeSec}`;
 }
-
 
 function clearCookie(name) {
   return `${name}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`;
