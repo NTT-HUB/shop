@@ -589,10 +589,6 @@ async function readJson(req) {
   }
 }
 
-// ===== PBKDF2 password hashing =====
-const PBKDF2_ITER = 120000;
-const KEY_LEN = 32;
-
 // ===== PASSWORD HASH (WORKERS SAFE) =====
 const PBKDF2_ITER = 120000;
 const KEY_LEN = 32;
