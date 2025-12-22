@@ -2,15 +2,46 @@
 <html lang="vi">
 <head>
   <meta charset="utf-8" />
-  <title>Đơn hàng</title>
+  <title>Chi tiết đơn hàng</title>
   <link rel="stylesheet" href="assets/style.css">
   <style>
-    .notice { border:2px solid #000; padding:15px; margin-top:15px; }
-    .btnRow { display:flex; gap:10px; margin-top:10px; }
-    .btnGreen { background:#0a0; color:#fff; border:2px solid #000; }
-    .btnRed { background:#c00; color:#fff; border:2px solid #000; }
-    .hide { display:none; }
-    pre { background:#111; color:#0f0; padding:10px; overflow:auto; }
+    .notice {
+      border: 2px solid #fff;
+      padding: 15px;
+      margin-top: 15px;
+      background: #0a0a0a;
+    }
+    .btnRow {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .btnGreen {
+      background: #0a0;
+      color: #fff;
+      border: 2px solid #fff;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .btnRed {
+      background: #c00;
+      color: #fff;
+      border: 2px solid #fff;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .hide {
+      display: none;
+    }
+    pre {
+      background: #000;
+      color: #0f0;
+      padding: 12px;
+      overflow: auto;
+      border: 2px dashed #fff;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
   </style>
 </head>
 <body>
@@ -29,35 +60,49 @@
   <div class="box">
     <h2 id="title">...</h2>
 
-    <p><b>Giá:</b> <span id="price"></span></p>
-    <p><b>Người bán:</b> <span id="seller"></span></p>
     <p>
-      <b>Liên hệ:</b>
-      <a id="contact" href="#" target="_blank">Nhấn để liên hệ</a>
+      <b>Giá trọn gói:</b>
+      <span id="price"></span>
+      <span class="muted">(mua 1 lần)</span>
     </p>
 
-    <!-- AC FILE -->
+    <p>
+      <b>Người bán:</b>
+      <span id="seller"></span>
+    </p>
+
+    <p>
+      <b>Liên hệ người bán:</b>
+      <a id="contact" href="#" target="_blank" rel="noopener">Nhấn để liên hệ</a>
+    </p>
+
+    <!-- AC SECRET -->
     <div id="acBox" class="notice hide">
-      <h3>Thông tin tài khoản (AC)</h3>
+      <h3>🔐 Thông tin tài khoản (AC)</h3>
+      <p class="muted">
+        Đây là thông tin bí mật, chỉ hiển thị sau khi thanh toán thành công.
+      </p>
       <pre id="acSecret"></pre>
     </div>
 
-    <!-- TIMER -->
+    <!-- WARRANTY TIMER -->
     <div id="timerBox" class="notice hide">
-      <b>Bảo hành AC:</b>
+      <b>⏳ Thời gian bảo hành AC:</b>
       <span id="timer">03:00</span><br>
-      Hết thời gian sẽ tự động chốt uy tín, không giải quyết tranh chấp.
+      <span class="muted">
+        Hết thời gian này, đơn hàng sẽ tự động chốt uy tín.
+      </span>
     </div>
 
-    <!-- VOTE -->
+    <!-- FEEDBACK / DISPUTE -->
     <div id="voteBox" class="notice">
       <p>
-        Bạn đã mua đơn hàng này.<br>
-        Vui lòng liên hệ người bán qua link để nhận hàng.
+        Bạn đã mua <b>1 đơn trọn gói</b> của sản phẩm này.<br>
+        Sau khi nhận hàng, vui lòng đánh giá để hoàn tất giao dịch.
       </p>
       <div class="btnRow">
-        <button class="btnGreen" onclick="vote('trust')">UY TÍN</button>
-        <button class="btnRed" onclick="vote('scam')">SCAM</button>
+        <button class="btnGreen" onclick="vote('trust')">✅ UY TÍN</button>
+        <button class="btnRed" onclick="vote('scam')">⚠️ BÁO SCAM</button>
       </div>
     </div>
   </div>
@@ -70,7 +115,6 @@ const orderId = new URLSearchParams(location.search).get("id");
 let order = null;
 let listing = null;
 let warrantyUntil = null;
-let orderKind = "product";
 
 // ===== LOAD ORDER =====
 async function load() {
@@ -86,7 +130,6 @@ async function load() {
 
   order = r.order;
 
-  // lấy thông tin listing
   const l = await apiGet("/api/listings/" + order.listing_id);
   if (!l.ok) {
     alert("Không tìm thấy sản phẩm");
@@ -94,7 +137,6 @@ async function load() {
   }
 
   listing = l.item;
-  orderKind = listing.kind;
 
   // render
   title.innerText = listing.title;
@@ -102,15 +144,13 @@ async function load() {
   seller.innerText = listing.seller_username;
   contact.href = listing.contact_link || "#";
 
-  // nếu là AC
-  if (orderKind === "ac") {
+  if (listing.kind === "ac") {
     await loadAC();
   }
 }
 
 // ===== LOAD AC SECRET =====
 async function loadAC() {
-  // lấy file AC
   const s = await fetch(API + "/api/orders/" + orderId + "/secret", {
     credentials: "include"
   }).then(r => r.json());
@@ -120,7 +160,6 @@ async function loadAC() {
     acBox.classList.remove("hide");
   }
 
-  // setup timer 3 phút (DÙNG order.created_at)
   warrantyUntil = order.created_at + 3 * 60 * 1000;
   timerBox.classList.remove("hide");
   startTimer();
@@ -147,10 +186,10 @@ function startTimer() {
   tick();
 }
 
-// ===== VOTE =====
+// ===== FEEDBACK =====
 async function vote(type) {
   if (type === "scam") {
-    const note = prompt("Mô tả scam (bắt buộc):");
+    const note = prompt("Mô tả lý do báo scam (bắt buộc):");
     if (!note) return;
 
     const d = await apiPost("/api/disputes", {
@@ -159,11 +198,11 @@ async function vote(type) {
     });
 
     if (!d.ok) {
-      alert(d.error);
+      alert(d.error || "Không thể gửi báo scam");
       return;
     }
 
-    alert("Đã gửi tranh chấp. Admin sẽ xem xét.");
+    alert("Đã gửi báo scam. Admin sẽ xem xét.");
     voteBox.classList.add("hide");
     return;
   }
@@ -174,10 +213,11 @@ async function vote(type) {
   });
 
   if (!r.ok) {
-    alert(r.error);
+    alert(r.error || "Không thể gửi đánh giá");
     return;
   }
 
+  alert("Cảm ơn bạn đã đánh giá!");
   voteBox.classList.add("hide");
 }
 
