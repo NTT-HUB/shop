@@ -782,6 +782,41 @@ if (path === "/api/deposits/create" && req.method === "POST") {
   }));
 }
 
+// ===== USER GET MY DEPOSITS =====
+if (path === "/api/deposits/my" && req.method === "GET") {
+  const u = await requireAuth(req, env);
+  if (!u) return withCors(bad("Unauthorized", 401));
+
+  const rows = await env.DB.prepare(`
+    SELECT
+      id,
+      provider,
+      gross_cents,
+      fee_cents,
+      net_cents,
+      status,
+      created_at
+    FROM deposits
+    WHERE user_id = ?
+    ORDER BY created_at DESC
+    LIMIT 50
+  `).bind(u.userId).all();
+
+  const items = (rows.results || []).map(r => ({
+    id: r.id,
+    provider: r.provider,
+    gross: Math.floor(r.gross_cents / 100),
+    fee: Math.floor(r.fee_cents / 100),
+    net: Math.floor(r.net_cents / 100),
+    status: r.status,
+    created_at: r.created_at
+  }));
+
+  const res = ok({ items });
+  res.headers.set("Cache-Control", "no-store");
+  return withCors(res);
+}
+
 
 // ===== ADMIN MARK DEPOSIT PAID (manual/bridge) =====
 if (path.startsWith("/api/admin/deposits/") && path.endsWith("/mark-paid") && req.method === "POST") {
