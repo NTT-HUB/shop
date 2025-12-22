@@ -6,12 +6,33 @@
   <link rel="stylesheet" href="assets/style.css">
   <style>
     .tabs { display:flex; gap:10px; margin-bottom:10px; }
-    .tab { border:2px solid #000; padding:6px 10px; cursor:pointer; }
+    .tab {
+      border:2px solid #000;
+      padding:6px 12px;
+      cursor:pointer;
+      font-weight:bold;
+    }
     .tab.active { background:#000; color:#fff; }
+
     .section { display:none; }
     .section.active { display:block; }
-    .note { border:2px dashed #000; padding:10px; margin-top:10px; }
-    img.qr { max-width:220px; border:2px solid #000; margin-top:10px; }
+
+    .note {
+      border:2px dashed #000;
+      padding:12px;
+      margin-top:12px;
+      background:#fafafa;
+    }
+
+    img.qr {
+      max-width:260px;
+      border:2px solid #000;
+      margin-top:10px;
+      background:#fff;
+    }
+
+    label { display:block; margin-top:8px; }
+    select, input { width:100%; }
   </style>
 </head>
 <body>
@@ -23,6 +44,7 @@
   </div>
   <nav>
     <a href="/dashboard.html">Tài khoản</a>
+    <a href="/deposit-history.html">Lịch sử nạp</a>
   </nav>
 </header>
 
@@ -30,6 +52,7 @@
   <div class="box">
     <h2>Nạp tiền</h2>
 
+    <!-- Tabs -->
     <div class="tabs">
       <div class="tab active" onclick="showTab('bank')">🏦 Bank</div>
       <div class="tab" onclick="showTab('card')">💳 Thẻ cào</div>
@@ -41,6 +64,7 @@
       <input id="bank_amount" placeholder="VD: 100000">
 
       <button class="btn block" onclick="depositBank()">Tạo yêu cầu nạp</button>
+
       <div id="bank_out"></div>
     </div>
 
@@ -49,9 +73,9 @@
       <label>Nhà mạng</label>
       <select id="card_type">
         <option value="">-- Chọn --</option>
-        <option>Viettel</option>
-        <option>Mobifone</option>
-        <option>Vinaphone</option>
+        <option value="Viettel">Viettel</option>
+        <option value="Mobifone">Mobifone</option>
+        <option value="Vinaphone">Vinaphone</option>
       </select>
 
       <label>Mệnh giá</label>
@@ -66,12 +90,13 @@
       </select>
 
       <label>Mã thẻ</label>
-      <input id="card_code">
+      <input id="card_code" placeholder="Nhập mã thẻ">
 
       <label>Seri</label>
-      <input id="card_serial">
+      <input id="card_serial" placeholder="Nhập số seri">
 
       <button class="btn block" onclick="depositCard()">Nạp thẻ</button>
+
       <div id="card_out"></div>
     </div>
   </div>
@@ -79,30 +104,33 @@
 
 <script src="assets/app.js"></script>
 <script>
-function showTab(t) {
-  document.querySelectorAll(".tab").forEach(e=>e.classList.remove("active"));
-  document.querySelectorAll(".section").forEach(e=>e.classList.remove("active"));
-  document.querySelector(`.tab[onclick*="${t}"]`).classList.add("active");
-  document.getElementById(t).classList.add("active");
+function showTab(tab) {
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  document.querySelectorAll(".section").forEach(s => s.classList.remove("active"));
+  document.querySelector(`.tab[onclick*="${tab}"]`).classList.add("active");
+  document.getElementById(tab).classList.add("active");
 }
 
+// ===== BANK =====
 async function depositBank() {
   const vnd = Number(bank_amount.value.replace(/[^0-9]/g,""));
-  if (!vnd) return alert("Nhập số tiền");
+  if (!vnd || vnd < 10000)
+    return alert("Số tiền tối thiểu 10.000đ");
 
   const r = await apiPost("/api/deposits/create", {
     method: "bank",
     amount_cents: vnd * 100
   });
-  if (!r.ok) return alert(r.error);
 
-  const qrText = encodeURIComponent(
-    `${r.bank_display_name}\nSTK:${r.bank_account}\nND:${r.pay_code}\nSo tien:${vnd}`
-  );
+  if (!r.ok) return alert(r.error || "Không thể tạo yêu cầu");
+
+  // VietQR URL (API đã trả sẵn)
+  const qrUrl = r.vietqr_url;
 
   bank_out.innerHTML = `
     <div class="note">
       <b>Thông tin chuyển khoản</b><br><br>
+
       <b>Ngân hàng:</b> ${r.bank_display_name}<br>
       <b>Số tài khoản:</b> ${r.bank_account}<br>
       <b>Nội dung:</b> <code>${r.pay_code}</code><br><br>
@@ -111,16 +139,20 @@ async function depositBank() {
       <b>Phí:</b> ${formatPrice(r.fee_cents)}<br>
       <b>Thực nhận:</b> ${formatPrice(r.net_cents)}<br><br>
 
-      <b>QR chuyển khoản:</b><br>
-      <img class="qr"
-        src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${qrText}">
+      <b>QR Nạp nhanh (VietQR / NAPAS)</b><br>
+      <img class="qr" src="${qrUrl}"><br>
+      <p class="muted">
+        Quét QR để chuyển khoản nhanh – đúng nội dung.<br>
+        <b>Không sửa nội dung chuyển khoản.</b>
+      </p>
     </div>
   `;
 }
 
+// ===== CARD =====
 async function depositCard() {
   if (!card_type.value || !card_amount.value || !card_code.value || !card_serial.value)
-    return alert("Nhập đầy đủ thông tin thẻ");
+    return alert("Vui lòng nhập đầy đủ thông tin thẻ");
 
   const r = await apiPost("/api/card/submit", {
     card: {
@@ -135,12 +167,14 @@ async function depositCard() {
 
   card_out.innerHTML = `
     <div class="note">
-      <b>Đã gửi thẻ thành công</b><br>
-      <p class="muted">Thẻ đang được xử lý, tiền sẽ vào ví sau vài giây.</p>
+      <b>Đã gửi thẻ thành công</b><br><br>
+      <p class="muted">
+        Thẻ đang được xử lý tự động.<br>
+        Vui lòng chờ vài giây để hệ thống cập nhật số dư.
+      </p>
     </div>
   `;
 }
-
 </script>
 
 </body>
