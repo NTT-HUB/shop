@@ -29,35 +29,70 @@ export default {
 
 
       // -------- AUTH --------
-      if (path === "/api/auth/register" && req.method === "POST") {
-        const body = await readJson(req);
-        if (!body) return withCors(bad("Invalid JSON"));
+   if (path === "/api/auth/register" && req.method === "POST") {
+  const body = await readJson(req);
+  if (!body) return withCors(bad("Invalid JSON"));
 
-        const { username, email, phone, password } = body;
-        if (!username || !email || !password) return withCors(bad("Missing fields"));
-        if (String(password).length < 6) return withCors(bad("Password too short"));
+  const { username, email, phone, password } = body;
 
-        const now = Date.now();
-        const id = crypto.randomUUID();
-        const password_hash = await hashPassword(String(password), env.PASSWORD_PEPPER);
+  if (!username || !email || !password) {
+    return withCors(bad("Missing fields"));
+  }
 
-        try {
-          await env.DB.prepare(
-            `INSERT INTO users (id, username, email, phone, password_hash, role, status, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, 'user', 'active', ?, ?)`
-          )
-            .bind(id, String(username), String(email), phone ? String(phone) : null, password_hash, now, now)
-            .run();
+  if (String(password).length < 6) {
+    return withCors(bad("Password too short"));
+  }
 
-          await env.DB.prepare(
-            `INSERT INTO wallets (user_id, balance_cents, updated_at) VALUES (?, 0, ?)`
-          ).bind(id, now).run();
-        } catch {
-          return withCors(bad("Username/email/phone already exists", 409));
-        }
+  const now = Date.now();
+  const id = crypto.randomUUID();
 
-        return withCors(ok({ user_id: id }));
-      }
+  let password_hash;
+  try {
+    password_hash = await hashPassword(String(password), env.PASSWORD_PEPPER);
+  } catch (e) {
+    console.error("HASH PASSWORD ERROR:", e);
+    return withCors(bad("Password error", 500));
+  }
+
+  try {
+    await env.DB.prepare(
+      `INSERT INTO users (
+        id, username, email, phone, password_hash,
+        role, status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, 'user', 'active', ?, ?)`
+    )
+      .bind(
+        id,
+        String(username),
+        String(email),
+        phone ? String(phone) : "", // ⚠️ KHÔNG BAO GIỜ NULL
+        password_hash,
+        now,
+        now
+      )
+      .run();
+
+    await env.DB.prepare(
+      `INSERT INTO wallets (user_id, balance_cents, updated_at)
+       VALUES (?, 0, ?)`
+    )
+      .bind(id, now)
+      .run();
+  } catch (e) {
+    console.error("REGISTER SQLITE ERROR:", e);
+
+    if (String(e).includes("UNIQUE")) {
+      return withCors(
+        bad("Username / Email / Phone đã tồn tại", 409)
+      );
+    }
+
+    return withCors(bad("Register failed", 500));
+  }
+
+  return withCors(ok({ user_id: id }));
+}
+
 
       if (path === "/api/auth/login" && req.method === "POST") {
         const body = await readJson(req);
@@ -487,9 +522,10 @@ export default {
       }
 
       return withCors(bad("Not found", 404));
-    } catch {
-      return withCors(json({ ok: false, error: "Server error" }, 500));
-    }
+    } catch (e) {
+  console.error("FATAL API ERROR:", e);
+  return withCors(json({ ok: false, error: "Server error" }, 500));
+}
   },
 };
 
