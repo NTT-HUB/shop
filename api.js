@@ -80,6 +80,47 @@ export default {
         return withCors(ok({ user_id: id }));
       }
 
+// ===== CREATE LISTING =====
+if (path === "/api/listings" && req.method === "POST") {
+  const u = await requireAuth(req, env);
+  if (!u) return withCors(bad("Unauthorized", 401));
+
+  const body = await readJson(req);
+  if (!body) return withCors(bad("Invalid JSON"));
+
+  const { kind, title, price_cents, quantity, contact_link } = body;
+
+  if (!kind || !title || price_cents == null) {
+    return withCors(bad("Missing fields"));
+  }
+
+  if (kind !== "product" && kind !== "ac") {
+    return withCors(bad("Invalid kind"));
+  }
+
+  const now = Date.now();
+  const id = crypto.randomUUID();
+
+  await env.DB.prepare(
+    `INSERT INTO listings
+     (id, seller_id, kind, title, price_cents, quantity, contact_link, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`
+  ).bind(
+    id,
+    u.userId,
+    kind,
+    String(title),
+    Number(price_cents),
+    Number(quantity || 1),
+    contact_link ? String(contact_link) : "",
+    now,
+    now
+  ).run();
+
+  return withCors(ok({ listing_id: id }));
+}
+
+      
       // ===== LOGIN =====
       if (path === "/api/auth/login" && req.method === "POST") {
         const body = await readJson(req);
