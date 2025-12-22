@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Đơn hàng</title>
+  <link rel="stylesheet" href="assets/style.css">
+  <style>
+    .btnRow{display:flex; gap:10px;}
+    .btnGreen{border:2px solid #000; background:#0a0; color:#fff;}
+    .btnRed{border:2px solid #000; background:#c00; color:#fff;}
+    .notice{border:2px solid #000; padding:15px; margin-top:15px;}
+    .hide{display:none;}
+  </style>
+</head>
+<body>
+<header>
+  <h1>ĐƠN HÀNG</h1>
+  <nav><a href="dashboard.html">Dashboard</a></nav>
+</header>
+
+<main class="container">
+  <div class="box">
+    <h2 id="title">...</h2>
+    <p>Giá: <b id="price"></b></p>
+    <p>Người bán: <b id="seller"></b></p>
+    <p>Liên hệ: <a id="contact" href="#" target="_blank">Nhấn để liên hệ</a></p>
+
+    <div id="acTimerBox" class="notice hide">
+      <b>AC bảo hành:</b> <span id="timer">03:00</span><br/>
+      Hết thời gian sẽ tự chốt uy tín, không giải quyết tranh chấp.
+    </div>
+
+    <div id="voteBox" class="notice">
+      <p><b>Vui lòng liên hệ người bán qua link để nhận hàng.</b></p>
+      <div class="btnRow">
+        <button class="btnGreen" onclick="trust()">UY TÍN</button>
+        <button class="btnRed" onclick="scam()">SCAM</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="assets/app.js"></script>
+<script>
+const orderId = new URLSearchParams(location.search).get("id");
+
+let orderKind = "product";
+let warrantyUntil = null;
+
+function fmtTime(ms) {
+  const s = Math.max(0, Math.floor(ms/1000));
+  const mm = String(Math.floor(s/60)).padStart(2,"0");
+  const ss = String(s%60).padStart(2,"0");
+  return `${mm}:${ss}`;
+}
+
+async function load() {
+  const r = await fetch(API + "/api/orders/" + orderId, { credentials: "include" });
+  const d = await r.json();
+  if (!d.ok) { alert(d.error || "Load order failed"); location.href="dashboard.html"; return; }
+
+  const o = d.order;
+  // Nếu API bạn chưa join listing/title/contact, bạn dùng /api/my/orders để show list.
+  // Ở bản API mình đưa ở trên, /api/my/orders có đủ title/contact/kind.
+  // Tạm: load listing detail để lấy contact/title/kind:
+  const listing = await apiGet("/api/listings/" + o.listing_id);
+
+  orderKind = listing?.item?.kind || "product";
+  document.getElementById("title").innerText = listing?.item?.title || ("Order " + o.id);
+  document.getElementById("price").innerText = formatPrice(o.subtotal_cents);
+  document.getElementById("seller").innerText = (listing?.item?.seller_username || o.seller_id);
+
+  const link = listing?.item?.contact_link || "#";
+  const a = document.getElementById("contact");
+  a.href = link; a.innerText = link === "#" ? "(không có)" : "Nhấn để liên hệ";
+
+  if (orderKind === "ac") {
+    warrantyUntil = o.created_at + 3*60*1000;
+    document.getElementById("acTimerBox").classList.remove("hide");
+    startTimer();
+  }
+}
+
+async function trust() {
+  const res = await apiPost("/api/orders/" + orderId + "/feedback", { type: "trust" });
+  if (res.ok) document.getElementById("voteBox").classList.add("hide");
+  else alert(res.error);
+}
+
+async function scam() {
+  const desc = prompt("Mô tả scam (bắt buộc):");
+  if (!desc) return;
+
+  // tạo dispute
+  const res = await apiPost("/api/disputes", { order_id: orderId, description: desc });
+  if (res.ok) {
+    alert("Đã gửi tranh chấp, admin sẽ xem xét.");
+    document.getElementById("voteBox").classList.add("hide");
+  } else {
+    alert(res.error);
+  }
+}
+
+function startTimer() {
+  const tick = async () => {
+    const left = warrantyUntil - Date.now();
+    document.getElementById("timer").innerText = fmtTime(left);
+
+    if (left <= 0) {
+      // hết hạn => auto trust (frontend cũng có thể gọi trust để chốt ngay)
+      document.getElementById("voteBox").classList.add("hide");
+      try { await trust(); } catch(e) {}
+      return;
+    }
+    setTimeout(tick, 1000);
+  };
+  tick();
+}
+
+load();
+</script>
+</body>
+</html>
