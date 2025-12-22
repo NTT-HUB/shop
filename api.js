@@ -683,41 +683,97 @@ if (path === "/api/deposits/create" && req.method === "POST") {
 
   const method = String(body.method || "");
   const gross = Number(body.amount_cents || 0);
-  if (!["bank","card"].includes(method)) return withCors(bad("Invalid method"));
-  if (!Number.isFinite(gross) || gross <= 0) return withCors(bad("Invalid amount"));
 
-  // load settings
-  const sRows = await env.DB.prepare("SELECT key,value FROM system_settings").all();
+  if (!["bank","card"].includes(method))
+    return withCors(bad("Invalid method"));
+
+  if (!Number.isFinite(gross) || gross <= 0)
+    return withCors(bad("Invalid amount"));
+
+  /* ================= LOAD SETTINGS ================= */
+  const sRows = await env.DB.prepare(
+    "SELECT key,value FROM system_settings"
+  ).all();
+
   const s = {};
   for (const r of (sRows.results || [])) s[r.key] = r.value;
 
-  const bankFeePercent = Number(s.bank_fee_percent || "5");
-  const cardFeePercent = Number(s.card_fee_percent || "5");
+  /* ================= AMOUNT ================= */
+  const amount = Math.floor(gross / 100); // VNĐ
+
+  const bankFeePercent = Number(s.bank_fee_percent || "0");
+  const cardFeePercent = Number(s.card_fee_percent || "0");
 
   const feePercent = method === "bank" ? bankFeePercent : cardFeePercent;
-  const fee = Math.round(gross * (feePercent / 100));
-  const net = Math.max(0, gross - fee);
+  const fee = Math.round(amount * (feePercent / 100));
+  const net = Math.max(0, amount - fee);
 
+  /* ================= BANK INFO (KEY MỚI) ================= */
+  const bank_name = s.bank_name;
+  const bank_account_name = s.bank_account_name;
+  const bank_account_number = s.bank_account_number;
+  const prefix = String(s.bank_transfer_prefix || "NAP");
+
+  if (method === "bank") {
+    if (!bank_name || !bank_account_name || !bank_account_number) {
+      return withCors(bad("Bank config missing", 500));
+    }
+  }
+
+  /* ================= CREATE DEPOSIT ================= */
   const id = crypto.randomUUID();
   const now = Date.now();
-  const provider = method === "bank" ? "bank_web2m" : (s.card_provider || "thesieure");
+  const provider = method === "bank"
+    ? "bank_manual"
+    : (s.card_provider || "thesieure");
 
   await env.DB.prepare(
     `INSERT INTO deposits
-     (id, user_id, provider, gross_cents, fee_cents, net_cents, status, provider_txn_id, raw_payload, created_at, updated_at)
+     (id, user_id, provider, gross_cents, fee_cents, net_cents,
+      status, provider_txn_id, raw_payload, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, 'pending', NULL, NULL, ?, ?)`
-  ).bind(id, u.userId, provider, gross, fee, net, now, now).run();
+  ).bind(
+    id,
+    u.userId,
+    provider,
+    gross,
+    Math.round(fee * 100),
+    Math.round(net * 100),
+    now,
+    now
+  ).run();
 
-  // code để người dùng ghi vào nội dung chuyển khoản
-  const prefix = String(s.web2m_prefix || "NAP");
-  const payCode = `${prefix}${id.slice(0, 8)}`; // ví dụ NAPa1b2c3d4
+  /* ================= PAY CODE ================= */
+  const payCode = `${prefix}${id.slice(0, 8)}`;
 
+  /* ================= BANK CODE MAP ================= */
+  function mapBankCode(name) {
+    const n = name.toLowerCase();
+    if (n.includes("acb")) return "ACB";
+    if (n.includes("mb")) return "MB";
+    if (n.includes("vietcom")) return "VCB";
+    if (n.includes("bidv")) return "BIDV";
+    if (n.includes("tech")) return "TCB";
+    return name.toUpperCase(); // fallback nếu admin nhập đúng code
+  }
+
+  /* ================= RESPONSE ================= */
   return withCors(ok({
+    ok: true,
     deposit_id: id,
     method,
-    gross_cents: gross,
-    fee_cents: fee,
-    net_cents: net,
+
+    // bank info cho frontend
+    bank_code: method === "bank" ? mapBankCode(bank_name) : null,
+    bank_name: bank_name || null,
+    bank_account_name: bank_account_name || null,
+    bank_account_number: bank_account_number || null,
+
+    // money (VNĐ)
+    amount,
+    fee,
+    net,
+
     pay_code: payCode,
     message:
       method === "bank"
@@ -725,6 +781,7 @@ if (path === "/api/deposits/create" && req.method === "POST") {
         : `Nạp thẻ: hệ thống sẽ tự xử lý, mã: ${payCode}`
   }));
 }
+
 
 // ===== ADMIN MARK DEPOSIT PAID (manual/bridge) =====
 if (path.startsWith("/api/admin/deposits/") && path.endsWith("/mark-paid") && req.method === "POST") {
