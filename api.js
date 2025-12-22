@@ -560,6 +560,106 @@ if (listingInfo?.kind === "ac") {
         return withCors(ok());
       }
 
+// ===== WITHDRAW (MANUAL) =====
+if (path === "/api/withdraw" && req.method === "POST") {
+  const u = await requireAuth(req, env);
+  if (!u) return withCors(bad("Unauthorized", 401));
+
+  const body = await readJson(req);
+  if (!body) return withCors(bad("Invalid JSON"));
+
+  const { method, amount_cents, bank, card } = body;
+
+  if (!method || !amount_cents || amount_cents <= 0) {
+    return withCors(bad("Missing fields"));
+  }
+
+  if (method !== "bank" && method !== "thesieure") {
+    return withCors(bad("Invalid method"));
+  }
+
+  // kiểm tra số dư
+  const wallet = await env.DB.prepare(
+    "SELECT balance_cents FROM wallets WHERE user_id=?"
+  ).bind(u.userId).first();
+
+  if (!wallet || wallet.balance_cents < amount_cents) {
+    return withCors(bad("Insufficient balance"));
+  }
+
+  // validate info
+  let bankInfo = "";
+
+  if (method === "bank") {
+    if (!bank?.name || !bank?.owner || !bank?.number) {
+      return withCors(bad("Missing bank info"));
+    }
+    bankInfo = JSON.stringify({
+      type: "bank",
+      name: bank.name,
+      owner: bank.owner,
+      number: bank.number
+    });
+  }
+
+  if (method === "thesieure") {
+    if (!card?.username || !card?.contact) {
+      return withCors(bad("Missing card info"));
+    }
+    bankInfo = JSON.stringify({
+      type: "thesieure",
+      username: card.username,
+      contact: card.contact
+    });
+  }
+
+  const fee = Math.round(amount_cents * 0.02); // 2% phí
+  const net = amount_cents - fee;
+  const now = Date.now();
+  const wid = crypto.randomUUID();
+
+  // trừ tiền user
+  await env.DB.prepare(
+    "UPDATE wallets SET balance_cents = balance_cents - ?, updated_at=? WHERE user_id=?"
+  ).bind(amount_cents, now, u.userId).run();
+
+  // ghi withdrawal
+  await env.DB.prepare(
+    `INSERT INTO withdrawals
+     (id, user_id, gross_cents, fee_cents, net_cents, bank_info, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`
+  ).bind(
+    wid,
+    u.userId,
+    amount_cents,
+    fee,
+    net,
+    bankInfo,
+    now,
+    now
+  ).run();
+
+  // ghi ledger
+  await env.DB.prepare(
+    `INSERT INTO wallet_ledger
+     (id, user_id, type, amount_cents, ref_type, ref_id, note, created_at)
+     VALUES (?, ?, 'withdraw', ?, 'withdraw', ?, ?, ?)`
+  ).bind(
+    crypto.randomUUID(),
+    u.userId,
+    -amount_cents,
+    wid,
+    "Rút tiền (chờ duyệt)",
+    now
+  ).run();
+
+  return withCors(ok({
+    withdraw_id: wid,
+    message: "Đơn của bạn sẽ được duyệt sau 2 ngày"
+  }));
+}
+
+
       // -------- DISPUTES --------
       if (path === "/api/disputes" && req.method === "POST") {
         const u = await requireAuth(req, env);
