@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>Nạp tiền</title>
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header>
+  <div class="brand"><a href="/">SHOP</a><small>Nạp tiền</small></div>
+  <nav>
+    <a href="/dashboard.html">Tài khoản</a>
+  </nav>
+</header>
+
+<main class="container">
+  <div class="box">
+    <h2>Nạp tiền</h2>
+
+    <label class="muted">Chọn phương thức</label>
+    <select id="method">
+      <option value="bank">Bank (thuế %)</option>
+      <option value="card">Card (thuế %)</option>
+    </select>
+
+    <label class="muted" style="margin-top:10px;display:block;">Số tiền (VNĐ)</label>
+    <input id="amount" placeholder="Ví dụ: 100000">
+
+    <button class="btn" style="margin-top:10px;" onclick="createDeposit()">Tạo yêu cầu nạp</button>
+
+    <div id="out" style="margin-top:12px;"></div>
+  </div>
+</main>
+
+<script src="assets/app.js"></script>
+<script>
+async function createDeposit() {
+  const method = document.getElementById("method").value;
+  const vnd = Number(String(amount.value).replace(/[^0-9]/g,"")) || 0;
+  if (vnd <= 0) return alert("Nhập số tiền hợp lệ");
+
+  // hệ thống bạn đang dùng cents theo “đ”, bạn đang formatPrice chia /100
+  // => Nếu bạn muốn 1đ=1cents thì: amount_cents=vnd
+  // Nếu bạn muốn cents thật (1đ=100 cents) thì: amount_cents=vnd*100
+  // Hiện web bạn đang format /100 => mình giữ đồng bộ: cents = vnd * 100
+  const amount_cents = vnd * 100;
+
+  const r = await apiPost("/api/deposits/create", { method, amount_cents });
+  if (!r.ok) return alert(r.error || "Lỗi");
+
+  if (method === "bank") {
+    out.innerHTML = `
+      <div class="box" style="margin-top:10px;">
+        <b>Tạo yêu cầu nạp bank thành công</b><br>
+        Số tiền: <b>${formatPrice(r.gross_cents)}</b><br>
+        Phí: <b>${formatPrice(r.fee_cents)}</b><br>
+        Thực nhận: <b>${formatPrice(r.net_cents)}</b><br><br>
+        <b>Nội dung chuyển khoản:</b> <code>${r.pay_code}</code><br>
+        <p class="muted">Chuyển khoản đúng nội dung để hệ thống nhận.</p>
+      </div>
+    `;
+  } else {
+    out.innerHTML = `
+      <div class="box" style="margin-top:10px;">
+        <b>Tạo yêu cầu nạp thẻ thành công</b><br>
+        Số tiền: <b>${formatPrice(r.gross_cents)}</b><br>
+        Phí: <b>${formatPrice(r.fee_cents)}</b><br>
+        Thực nhận: <b>${formatPrice(r.net_cents)}</b><br><br>
+        <p class="muted">Mã yêu cầu: <code>${r.pay_code}</code></p>
+        <p class="muted">Bạn sẽ được cộng tiền sau khi hệ thống duyệt thẻ.</p>
+      </div>
+    `;
+  }
+}
+</script>
+</body>
+</html>
