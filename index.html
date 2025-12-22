@@ -88,16 +88,17 @@
             </div>
             <h3>${i.title}</h3>
             <p class="muted">${i.description ? i.description.slice(0, 120) : "Không có mô tả"}${i.description && i.description.length > 120 ? "…" : ""}</p>
-            <div class="item-meta">
-              <div>
-                <div class="price">${formatPrice(i.price_cents)}</div>
-                <div class="muted">Tồn kho: ${i.quantity ?? 0}</div>
-              </div>
-              <div class="seller">
-                <span>Người bán: <b>${i.seller_username}</b></span>
-                <span class="muted">Uy tín: ${i.seller_reputation ?? 0}</span>
-              </div>
-            </div>
+          <div class="item-meta">
+  <div>
+    <div class="price">${formatPrice(i.price_cents)}</div>
+    <div class="muted">Giá trọn gói – mua 1 lần</div>
+  </div>
+  <div class="seller">
+    <span>Người bán: <b>${i.seller_username}</b></span>
+    <span class="muted">Uy tín: ${i.seller_reputation ?? 0}</span>
+  </div>
+</div>
+
             <a class="btn block" href="listing.html?id=${i.id}">Xem chi tiết</a>
           </article>
         `;
