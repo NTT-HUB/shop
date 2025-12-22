@@ -1,16 +1,27 @@
+/* ================= RESET & VAR ================= */
 * {
   box-sizing: border-box;
   font-family: Arial, Helvetica, sans-serif;
 }
 
+:root {
+  --bg: #000;
+  --fg: #fff;
+  --border: #fff;
+  --muted: #aaa;
+  --soft: #111;
+  --card: #0a0a0a;
+}
+
+/* ================= BASE ================= */
 body {
   margin: 0;
-  background: #fff;
-  color: #000;
+  background: var(--bg);
+  color: var(--fg);
 }
 
 a {
-  color: #000;
+  color: var(--fg);
   text-decoration: none;
 }
 
@@ -18,18 +29,14 @@ a:hover {
   text-decoration: underline;
 }
 
+/* ================= HEADER ================= */
 header {
-  border-bottom: 2px solid #000;
+  border-bottom: 2px solid var(--border);
   padding: 15px 20px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 10px;
-}
-
-header h1 {
-  margin: 0;
-  font-size: 20px;
 }
 
 nav a {
@@ -44,9 +51,10 @@ nav a {
 
 .brand small {
   display: block;
-  color: #555;
+  color: var(--muted);
 }
 
+/* ================= LAYOUT ================= */
 .container {
   max-width: 1100px;
   margin: 30px auto;
@@ -54,15 +62,17 @@ nav a {
 }
 
 .box {
-  border: 2px solid #000;
+  border: 2px solid var(--border);
   padding: 20px;
   margin-bottom: 20px;
+  background: var(--card);
 }
 
 .box h2 {
   margin-top: 0;
 }
 
+/* ================= HERO ================= */
 .hero {
   display: grid;
   grid-template-columns: 2fr 1.1fr;
@@ -72,22 +82,23 @@ nav a {
 }
 
 .hero-card {
-  border: 2px dashed #000;
+  border: 2px dashed var(--border);
   padding: 15px;
-  background: #f8f8f8;
+  background: var(--soft);
 }
 
 .eyebrow {
   letter-spacing: 2px;
   font-size: 12px;
-  color: #444;
+  color: var(--muted);
   margin-bottom: 6px;
 }
 
 .muted {
-  color: #555;
+  color: var(--muted);
 }
 
+/* ================= BUTTON ================= */
 .cta-row {
   display: flex;
   gap: 10px;
@@ -97,28 +108,35 @@ nav a {
 .btn {
   display: inline-block;
   padding: 10px 16px;
-  border: 2px solid #000;
-  background: #fff;
-  color: #000;
+  border: 2px solid var(--border);
+  background: transparent;
+  color: var(--fg);
   font-weight: bold;
   cursor: pointer;
   text-align: center;
 }
 
 .btn.primary {
-  background: #000;
-  color: #fff;
+  background: var(--fg);
+  color: var(--bg);
 }
 
 .btn.ghost {
-  background: #fff;
-  color: #000;
+  background: transparent;
+  color: var(--fg);
 }
 
 .btn.block {
   width: 100%;
 }
 
+button:hover,
+.btn:hover {
+  background: var(--fg);
+  color: var(--bg);
+}
+
+/* ================= FORM ================= */
 input,
 select,
 textarea,
@@ -127,26 +145,28 @@ button {
   padding: 10px;
   margin-top: 8px;
   margin-bottom: 15px;
-  border: 2px solid #000;
-  background: #fff;
-  color: #000;
+  border: 2px solid var(--border);
+  background: transparent;
+  color: var(--fg);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted);
 }
 
 textarea {
   resize: vertical;
 }
 
-button {
-  cursor: pointer;
-  font-weight: bold;
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--border);
 }
 
-button:hover,
-.btn:hover {
-  background: #000;
-  color: #fff;
-}
-
+/* ================= LIST / ITEM ================= */
 .list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
@@ -154,8 +174,13 @@ button:hover,
 }
 
 .item {
-  border: 2px solid #000;
+  border: 2px solid var(--border);
   padding: 15px;
+  background: var(--card);
+}
+
+.item:hover {
+  background: #111;
 }
 
 .item-head {
@@ -185,22 +210,25 @@ button:hover,
   font-size: 20px;
 }
 
+/* ================= BADGE ================= */
 .badge {
   display: inline-block;
   padding: 4px 8px;
-  border: 1px solid #000;
+  border: 1px solid var(--border);
   font-size: 12px;
-  background: #e6f1ff;
+  background: #111;
+  color: var(--fg);
 }
 
 .badge-warning {
-  background: #fff4e5;
+  background: #332200;
 }
 
 .badge-info {
-  background: #e6f1ff;
+  background: #002233;
 }
 
+/* ================= OTHER ================= */
 .empty {
   text-align: center;
   margin-top: 10px;
@@ -225,7 +253,7 @@ button:hover,
 
 .label {
   font-size: 12px;
-  color: #444;
+  color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 1px;
 }
@@ -235,14 +263,17 @@ button:hover,
   justify-content: flex-end;
 }
 
+/* ================= FOOTER ================= */
 .footer {
   text-align: center;
   padding: 20px;
-  border-top: 2px solid #000;
+  border-top: 2px solid var(--border);
   margin-top: 50px;
   font-size: 14px;
+  color: var(--muted);
 }
 
+/* ================= RESPONSIVE ================= */
 @media (max-width: 768px) {
   .hero {
     grid-template-columns: 1fr;
