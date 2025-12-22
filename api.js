@@ -676,12 +676,13 @@ function getCookie(req, name) {
 }
 
 function setCookie(name, value, maxAgeSec) {
-  return `${name}=${encodeURIComponent(value)}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${maxAgeSec}`;
+  return `${name}=${encodeURIComponent(value)}; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=${maxAgeSec}`;
 }
 
 function clearCookie(name) {
-  return `${name}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`;
+  return `${name}=; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=0`;
 }
+
 
 function ipPrefixFromReq(req) {
   const ip = req.headers.get("cf-connecting-ip") || "";
