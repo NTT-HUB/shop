@@ -6,37 +6,110 @@
   <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
-<header>
-  <h1>SHOP</h1>
-  <nav>
-    <a href="/login.html">Login</a>
-    <a href="/dashboard.html">Dashboard</a>
-  </nav>
-</header>
+  <header>
+    <div class="brand">
+      <a href="/">SHOP</a>
+      <small>Chợ đồ số &amp; tài khoản</small>
+    </div>
+    <nav>
+      <a href="/create.html">Đăng bán</a>
+      <a href="/dashboard.html">Tài khoản</a>
+      <a href="/login.html">Đăng nhập</a>
+    </nav>
+  </header>
 
-<div class="container">
-  <div class="list" id="list"></div>
-</div>
-
-<div class="footer">© Shop</div>
-
-<script src="assets/app.js"></script>
-<script>
-async function load() {
-  const data = await apiGet("/api/listings");
-  const box = document.getElementById("list");
-  box.innerHTML = "";
-  data.items.forEach(i => {
-    box.innerHTML += `
-      <div class="item">
-        <h3>${i.title}</h3>
-        <div class="price">${i.price_cents / 100} đ</div>
-        <a href="listing.html?id=${i.id}">Xem chi tiết</a>
+  <main class="container">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">MUA BÁN NHANH - THANH TOÁN AN TOÀN</p>
+        <h1>Khởi đầu gian hàng của bạn chỉ với vài bước</h1>
+        <p class="muted">
+          Tìm kiếm sản phẩm, tài khoản (AC) uy tín. Thanh toán ví nội bộ, hỗ trợ tranh chấp, phản hồi người bán.
+        </p>
+        <div class="cta-row">
+          <a class="btn primary" href="/create.html">Đăng bán ngay</a>
+          <a class="btn ghost" href="/register.html">Tạo tài khoản</a>
+        </div>
       </div>
-    `;
-  });
-}
-load();
-</script>
+      <div class="hero-card">
+        <p class="muted">Bảo vệ người mua & người bán</p>
+        <ul>
+          <li>• Xác thực phiên đăng nhập qua cookie bảo mật</li>
+          <li>• Phản hồi uy tín người bán sau mỗi đơn</li>
+          <li>• Mua AC sẽ nhận nội dung bí mật sau khi thanh toán</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="filters">
+      <form id="searchForm" class="filter-form">
+        <input id="q" name="q" placeholder="Tìm kiếm theo tên / mô tả">
+        <select id="kind" name="kind">
+          <option value="">Tất cả</option>
+          <option value="product">Sản phẩm</option>
+          <option value="ac">Tài khoản (AC)</option>
+        </select>
+        <button type="submit" class="btn">Tìm kiếm</button>
+      </form>
+    </section>
+
+    <section>
+      <div class="list" id="list"></div>
+      <p id="empty" class="empty muted" hidden>Không tìm thấy sản phẩm nào. Hãy thử từ khóa khác.</p>
+    </section>
+  </main>
+
+  <div class="footer">© Shop</div>
+
+  <script src="assets/app.js"></script>
+  <script>
+    const listEl = document.getElementById("list");
+    const emptyEl = document.getElementById("empty");
+
+    async function load(params = {}) {
+      const query = new URLSearchParams();
+      if (params.q) query.set("q", params.q.trim());
+      if (params.kind) query.set("kind", params.kind);
+      const data = await apiGet("/api/listings" + (query.toString() ? "?" + query.toString() : ""));
+
+      listEl.innerHTML = "";
+      if (!data.items || data.items.length === 0) {
+        emptyEl.hidden = false;
+        return;
+      }
+      emptyEl.hidden = true;
+
+      data.items.forEach((i) => {
+        listEl.innerHTML += `
+          <article class="item">
+            <div class="item-head">
+              <span class="badge ${i.kind === "ac" ? "badge-warning" : "badge-info"}">${i.kind === "ac" ? "Tài khoản (AC)" : "Sản phẩm"}</span>
+              <span class="muted">#${i.id.slice(0, 6)}</span>
+            </div>
+            <h3>${i.title}</h3>
+            <p class="muted">${i.description ? i.description.slice(0, 120) : "Không có mô tả"}${i.description && i.description.length > 120 ? "…" : ""}</p>
+            <div class="item-meta">
+              <div>
+                <div class="price">${formatPrice(i.price_cents)}</div>
+                <div class="muted">Tồn kho: ${i.quantity ?? 0}</div>
+              </div>
+              <div class="seller">
+                <span>Người bán: <b>${i.seller_username}</b></span>
+                <span class="muted">Uy tín: ${i.seller_reputation ?? 0}</span>
+              </div>
+            </div>
+            <a class="btn block" href="listing.html?id=${i.id}">Xem chi tiết</a>
+          </article>
+        `;
+      });
+    }
+
+    document.getElementById("searchForm").addEventListener("submit", (e) => {
+      e.preventDefault();
+      load({ q: q.value, kind: kind.value });
+    });
+
+    load();
+  </script>
 </body>
 </html>

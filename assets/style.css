@@ -24,6 +24,7 @@ header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 10px;
 }
 
 header h1 {
@@ -36,8 +37,18 @@ nav a {
   font-weight: bold;
 }
 
+.brand a {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.brand small {
+  display: block;
+  color: #555;
+}
+
 .container {
-  max-width: 900px;
+  max-width: 1100px;
   margin: 30px auto;
   padding: 0 15px;
 }
@@ -52,7 +63,66 @@ nav a {
   margin-top: 0;
 }
 
-input, select, textarea, button {
+.hero {
+  display: grid;
+  grid-template-columns: 2fr 1.1fr;
+  gap: 20px;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.hero-card {
+  border: 2px dashed #000;
+  padding: 15px;
+  background: #f8f8f8;
+}
+
+.eyebrow {
+  letter-spacing: 2px;
+  font-size: 12px;
+  color: #444;
+  margin-bottom: 6px;
+}
+
+.muted {
+  color: #555;
+}
+
+.cta-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.btn {
+  display: inline-block;
+  padding: 10px 16px;
+  border: 2px solid #000;
+  background: #fff;
+  color: #000;
+  font-weight: bold;
+  cursor: pointer;
+  text-align: center;
+}
+
+.btn.primary {
+  background: #000;
+  color: #fff;
+}
+
+.btn.ghost {
+  background: #fff;
+  color: #000;
+}
+
+.btn.block {
+  width: 100%;
+}
+
+input,
+select,
+textarea,
+button {
   width: 100%;
   padding: 10px;
   margin-top: 8px;
@@ -71,14 +141,15 @@ button {
   font-weight: bold;
 }
 
-button:hover {
+button:hover,
+.btn:hover {
   background: #000;
   color: #fff;
 }
 
 .list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 15px;
 }
 
@@ -87,13 +158,81 @@ button:hover {
   padding: 15px;
 }
 
+.item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.item-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.seller {
+  text-align: right;
+}
+
 .item h3 {
-  margin-top: 0;
+  margin-top: 8px;
 }
 
 .price {
   font-weight: bold;
   margin: 10px 0;
+  font-size: 20px;
+}
+
+.badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border: 1px solid #000;
+  font-size: 12px;
+  background: #e6f1ff;
+}
+
+.badge-warning {
+  background: #fff4e5;
+}
+
+.badge-info {
+  background: #e6f1ff;
+}
+
+.empty {
+  text-align: center;
+  margin-top: 10px;
+}
+
+.filters {
+  margin-bottom: 10px;
+}
+
+.filter-form {
+  display: grid;
+  grid-template-columns: 1fr 180px 120px;
+  gap: 10px;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin: 20px 0;
+}
+
+.label {
+  font-size: 12px;
+  color: #444;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.action-row {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .footer {
@@ -102,4 +241,30 @@ button:hover {
   border-top: 2px solid #000;
   margin-top: 50px;
   font-size: 14px;
+}
+
+@media (max-width: 768px) {
+  .hero {
+    grid-template-columns: 1fr;
+  }
+
+  header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  nav a {
+    margin-left: 0;
+    margin-right: 10px;
+  }
+
+  .filter-form {
+    grid-template-columns: 1fr;
+  }
+
+  .item-meta {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }

@@ -6,34 +6,42 @@
   <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
-<header>
-  <h1>REGISTER</h1>
-</header>
+  <header>
+    <div class="brand">
+      <a href="/">SHOP</a>
+      <small>Tạo tài khoản</small>
+    </div>
+    <nav>
+      <a href="login.html">Đăng nhập</a>
+    </nav>
+  </header>
 
-<div class="container">
-  <div class="box">
-    <input id="username" placeholder="Username">
-    <input id="email" placeholder="Email">
-    <input id="phone" placeholder="Phone">
-    <input id="password" type="password" placeholder="Password">
-    <button onclick="register()">Tạo tài khoản</button>
-  </div>
-</div>
+  <main class="container">
+    <div class="box">
+      <h2>Đăng ký</h2>
+      <input id="username" placeholder="Username">
+      <input id="email" placeholder="Email">
+      <input id="phone" placeholder="Phone (tùy chọn)">
+      <input id="password" type="password" placeholder="Password (>= 6 ký tự)">
+      <button onclick="register()">Tạo tài khoản</button>
+      <p class="muted">Đã có tài khoản? <a href="login.html">Đăng nhập</a></p>
+    </div>
+  </main>
 
-<script src="assets/app.js"></script>
-<script>
-async function register() {
-  const res = await apiPost("/api/auth/register", {
-    username: username.value,
-    email: email.value,
-    phone: phone.value,
-    password: password.value
-  });
-  if (res.ok) {
-    alert("Tạo tài khoản thành công");
-    location.href = "login.html";
-  } else alert(res.error);
-}
-</script>
+  <script src="assets/app.js"></script>
+  <script>
+    async function register() {
+      const res = await apiPost("/api/auth/register", {
+        username: username.value,
+        email: email.value,
+        phone: phone.value,
+        password: password.value
+      });
+      if (res.ok) {
+        alert("Tạo tài khoản thành công");
+        location.href = "login.html";
+      } else alert(res.error || "Không thể tạo tài khoản");
+    }
+  </script>
 </body>
 </html>
