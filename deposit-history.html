@@ -6,13 +6,11 @@
   <link rel="stylesheet" href="assets/style.css">
   <style>
     table { width:100%; border-collapse:collapse; }
-    th, td { border:2px solid #000; padding:8px; text-align:left; }
+    th, td { border:2px solid #000; padding:6px; text-align:center; }
     th { background:#000; color:#fff; }
-    .status { font-weight:bold; }
-    .pending { color:#d08c00; }
-    .paid { color:#0a0; }
-    .failed { color:#c00; }
-    .muted { opacity:.7; }
+    .pending { color:#d97706; font-weight:bold; }
+    .success { color:#16a34a; font-weight:bold; }
+    .failed { color:#dc2626; font-weight:bold; }
   </style>
 </head>
 <body>
@@ -44,7 +42,7 @@
         </tr>
       </thead>
       <tbody id="rows">
-        <tr><td colspan="6" class="muted">Đang tải…</td></tr>
+        <tr><td colspan="6">Đang tải...</td></tr>
       </tbody>
     </table>
   </div>
@@ -52,47 +50,39 @@
 
 <script src="assets/app.js"></script>
 <script>
-function statusText(s) {
-  if (s === "pending") return "<span class='status pending'>Đang xử lý</span>";
-  if (s === "paid") return "<span class='status paid'>Thành công</span>";
-  if (s === "failed") return "<span class='status failed'>Thất bại</span>";
-  return s;
-}
-
-function providerText(p) {
-  if (p === "bank_web2m") return "Ngân hàng";
-  if (p === "thesieure") return "Thẻ cào";
-  return p;
-}
-
-async function load() {
-  const r = await apiGet("/api/my/deposits");
+async function loadHistory() {
+  const r = await apiGet("/api/deposits/my?_=" + Date.now());
   if (!r.ok) {
-    rows.innerHTML = "<tr><td colspan='6'>Chưa đăng nhập</td></tr>";
+    rows.innerHTML = `<tr><td colspan="6">Không thể tải dữ liệu</td></tr>`;
     return;
   }
 
-  if (!r.items || r.items.length === 0) {
-    rows.innerHTML = "<tr><td colspan='6' class='muted'>Chưa có giao dịch nào</td></tr>";
+  if (!r.items.length) {
+    rows.innerHTML = `<tr><td colspan="6">Chưa có giao dịch</td></tr>`;
     return;
   }
 
-  rows.innerHTML = "";
-  r.items.forEach(d => {
-    rows.innerHTML += `
-      <tr>
-        <td>${new Date(d.created_at).toLocaleString("vi-VN")}</td>
-        <td>${providerText(d.provider)}</td>
-        <td>${formatPrice(d.gross_cents)}</td>
-        <td>${formatPrice(d.fee_cents)}</td>
-        <td>${formatPrice(d.net_cents)}</td>
-        <td>${statusText(d.status)}</td>
-      </tr>
-    `;
-  });
+  rows.innerHTML = r.items.map(d => `
+    <tr>
+      <td>${new Date(d.created_at).toLocaleString()}</td>
+      <td>${d.provider}</td>
+      <td>${formatPrice(d.gross)}</td>
+      <td>${formatPrice(d.fee)}</td>
+      <td>${formatPrice(d.net)}</td>
+      <td class="${d.status}">
+        ${d.status === "pending" ? "Đang xử lý"
+          : d.status === "success" ? "Thành công"
+          : "Thất bại"}
+      </td>
+    </tr>
+  `).join("");
 }
 
-load();
+// load lần đầu
+loadHistory();
+
+// REAL-TIME: refresh mỗi 5 giây
+setInterval(loadHistory, 5000);
 </script>
 
 </body>
