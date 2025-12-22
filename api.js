@@ -318,7 +318,7 @@ if (path === "/api/my/orders" && req.method === "GET") {
       }
 
       // -------- PURCHASE --------
- // POST /api/orders (BUY)
+// POST /api/orders (BUY ALL)
 if (path === "/api/orders" && req.method === "POST") {
   const u = await requireAuth(req, env);
   if (!u) return withCors(bad("Unauthorized", 401));
@@ -327,8 +327,7 @@ if (path === "/api/orders" && req.method === "POST") {
   if (!body || !body.listing_id)
     return withCors(bad("Missing listing_id"));
 
-  const qty = Math.max(1, Number(body.quantity || 1));
-
+  // 🔒 LẤY LISTING
   const listing = await env.DB.prepare(
     "SELECT id, seller_id, kind, price_cents, quantity, status FROM listings WHERE id=?"
   ).bind(body.listing_id).first();
@@ -339,10 +338,13 @@ if (path === "/api/orders" && req.method === "POST") {
   if (listing.seller_id === u.userId)
     return withCors(bad("Cannot buy your own listing", 400));
 
-  if (listing.quantity < qty)
-    return withCors(bad("Not enough stock", 400));
+  if (listing.quantity <= 0)
+    return withCors(bad("Out of stock", 400));
 
-  const subtotal = listing.price_cents * qty;
+  // ✅ MUA TRỌN GÓI
+  const boughtQty = listing.quantity;     // VD: 388
+  const subtotal = listing.price_cents;   // GIÁ TRỌN GÓI
+
   const platformFee = Math.round(subtotal * 0.05);
   const sellerIncome = subtotal - platformFee;
 
@@ -356,6 +358,14 @@ if (path === "/api/orders" && req.method === "POST") {
   const now = Date.now();
   const orderId = crypto.randomUUID();
 
+  // 🔐 CHỐNG 2 NGƯỜI MUA CÙNG LÚC (ATOMIC)
+  const lock = await env.DB.prepare(
+    "UPDATE listings SET quantity=0, status='sold_out', updated_at=? WHERE id=? AND quantity>0"
+  ).bind(now, listing.id).run();
+
+  if (lock.changes === 0)
+    return withCors(bad("Listing already sold", 409));
+
   // 1️⃣ trừ tiền buyer
   await env.DB.prepare(
     "UPDATE wallets SET balance_cents = balance_cents - ?, updated_at=? WHERE user_id=?"
@@ -366,18 +376,7 @@ if (path === "/api/orders" && req.method === "POST") {
     "UPDATE wallets SET balance_cents = balance_cents + ?, updated_at=? WHERE user_id=?"
   ).bind(sellerIncome, now, listing.seller_id).run();
 
-  // 3️⃣ cập nhật tồn kho
-  const newQty = listing.quantity - qty;
-  await env.DB.prepare(
-    "UPDATE listings SET quantity=?, status=?, updated_at=? WHERE id=?"
-  ).bind(
-    newQty,
-    newQty === 0 ? "sold_out" : "active",
-    now,
-    listing.id
-  ).run();
-
-  // 4️⃣ tạo order
+  // 3️⃣ tạo order (quantity = TOÀN BỘ)
   await env.DB.prepare(
     `INSERT INTO orders
      (id, buyer_id, seller_id, listing_id, unit_price_cents, quantity,
@@ -389,14 +388,14 @@ if (path === "/api/orders" && req.method === "POST") {
     listing.seller_id,
     listing.id,
     listing.price_cents,
-    qty,
-    subtotal,
+    boughtQty,          // ✅ 388
+    subtotal,           // ✅ giá trọn gói
     platformFee,
     sellerIncome,
     now
   ).run();
 
-  // 5️⃣ ghi lịch sử MUA (buyer)
+  // 4️⃣ lịch sử MUA
   await env.DB.prepare(
     `INSERT INTO wallet_ledger
      (id, user_id, type, amount_cents, ref_type, ref_id, note, created_at)
@@ -406,11 +405,11 @@ if (path === "/api/orders" && req.method === "POST") {
     u.userId,
     -subtotal,
     orderId,
-    `Mua đơn hàng ${orderId}`,
+    `Mua trọn gói đơn hàng ${orderId}`,
     now
   ).run();
 
-  // 6️⃣ ghi lịch sử BÁN (seller)
+  // 5️⃣ lịch sử BÁN
   await env.DB.prepare(
     `INSERT INTO wallet_ledger
      (id, user_id, type, amount_cents, ref_type, ref_id, note, created_at)
@@ -420,12 +419,16 @@ if (path === "/api/orders" && req.method === "POST") {
     listing.seller_id,
     sellerIncome,
     orderId,
-    `Bán đơn hàng ${orderId}`,
+    `Bán trọn gói đơn hàng ${orderId}`,
     now
   ).run();
 
-  return withCors(ok({ order_id: orderId }));
+  return withCors(ok({
+    order_id: orderId,
+    bought_quantity: boughtQty
+  }));
 }
+
 
 // ===== ADMIN LIST DISPUTES =====
 if (path === "/api/admin/disputes" && req.method === "GET") {
