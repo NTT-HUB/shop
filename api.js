@@ -427,6 +427,25 @@ if (path === "/api/orders" && req.method === "POST") {
   return withCors(ok({ order_id: orderId }));
 }
 
+// ===== ADMIN LIST DISPUTES =====
+if (path === "/api/admin/disputes" && req.method === "GET") {
+  const admin = await requireAdmin(req, env);
+  if (!admin) return withCors(bad("Unauthorized", 401));
+
+  const rows = await env.DB.prepare(
+    `SELECT d.*, 
+            o.subtotal_cents,
+            bu.username AS buyer_username,
+            su.username AS seller_username
+     FROM disputes d
+     JOIN orders o ON o.id = d.order_id
+     JOIN users bu ON bu.id = d.buyer_id
+     JOIN users su ON su.id = d.seller_id
+     ORDER BY d.created_at DESC`
+  ).all();
+
+  return withCors(ok({ items: rows.results || [] }));
+}
 
 
       // GET /api/orders/:id
