@@ -39,18 +39,22 @@
     <h2 id="title">...</h2>
     <p id="desc" class="muted"></p>
 
+    <!-- META INFO -->
     <div class="meta">
       <div><b>Giá trọn gói:</b> <span id="price"></span></div>
+      <div><b>Số lượng:</b> <span id="qty"></span></div>
       <div><b>Tình trạng:</b> <span id="status"></span></div>
       <div><b>Người bán:</b> <span id="seller"></span></div>
       <div><b>Uy tín:</b> <span id="rep"></span></div>
     </div>
 
+    <!-- BUY BOX -->
     <div id="buyBox" class="buy-box">
-      <button class="btn primary block" onclick="confirmBuy()">Mua ngay</button>
+      <button class="btn primary block" onclick="confirmBuy()">Mua trọn gói</button>
       <p class="muted">
-        • Mỗi sản phẩm chỉ bán <b>1 lần</b><br>
-        • Sau khi thanh toán, đơn hàng không thể hoàn tác
+        • Mua <b>1 lần</b> là mua <b>toàn bộ số lượng</b><br>
+        • Giá hiển thị là <b>giá trọn gói</b><br>
+        • Sau khi thanh toán, giao dịch không thể hoàn tác
       </p>
     </div>
 
@@ -63,6 +67,7 @@
 const id = new URLSearchParams(location.search).get("id");
 let listing = null;
 
+// ===== LOAD LISTING =====
 async function load() {
   const r = await apiGet("/api/listings/" + id);
   if (!r.ok) {
@@ -76,6 +81,7 @@ async function load() {
   title.innerText = listing.title;
   desc.innerText = listing.description || "Không có mô tả";
   price.innerText = formatPrice(listing.price_cents);
+  qty.innerText = listing.quantity;
   seller.innerText = listing.seller_username;
   rep.innerText = listing.seller_reputation || 0;
 
@@ -87,27 +93,30 @@ async function load() {
   }
 }
 
+// ===== CONFIRM BUY ALL =====
 async function confirmBuy() {
   if (!listing || listing.quantity <= 0) return;
 
   const ok = confirm(
-    "Bạn có chắc muốn mua sản phẩm này?\n\n" +
-    "✔ Giá trọn gói: " + formatPrice(listing.price_cents) + "\n" +
-    "✔ Mỗi sản phẩm chỉ bán 1 lần\n" +
-    "⚠ Sau khi thanh toán, giao dịch không thể hoàn tác."
+    "BẠN CÓ CHẮC MUỐN MUA TOÀN BỘ SẢN PHẨM NÀY?\n\n" +
+    "• Số lượng: " + listing.quantity + "\n" +
+    "• Giá trọn gói: " + formatPrice(listing.price_cents) + "\n\n" +
+    "Sau khi mua, toàn bộ số lượng sẽ thuộc về bạn.\n" +
+    "⚠ Giao dịch KHÔNG thể hoàn tác."
   );
 
   if (!ok) return;
 
-  buy();
+  buyAll();
 }
 
-async function buy() {
+// ===== BUY ALL =====
+async function buyAll() {
   msg.innerText = "Đang tạo đơn hàng...";
 
   const res = await apiPost("/api/orders", {
     listing_id: id,
-    quantity: 1
+    buy_all: true
   });
 
   if (!res.ok) {
@@ -118,6 +127,7 @@ async function buy() {
   location.href = "/order.html?id=" + res.order_id;
 }
 
+// ===== INIT =====
 load();
 </script>
 
