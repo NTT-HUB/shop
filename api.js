@@ -318,7 +318,7 @@ if (path === "/api/my/orders" && req.method === "GET") {
       }
 
       // -------- PURCHASE --------
-  // POST /api/orders (BUY)
+ // POST /api/orders (BUY)
 if (path === "/api/orders" && req.method === "POST") {
   const u = await requireAuth(req, env);
   if (!u) return withCors(bad("Unauthorized", 401));
@@ -426,6 +426,20 @@ if (path === "/api/orders" && req.method === "POST") {
 
   return withCors(ok({ order_id: orderId }));
 }
+
+
+
+      // GET /api/orders/:id
+      if (path.startsWith("/api/orders/") && req.method === "GET" && !path.endsWith("/secret") && !path.endsWith("/feedback")) {
+        const u = await requireAuth(req, env);
+        if (!u) return withCors(bad("Unauthorized", 401));
+
+        const orderId = path.split("/").pop();
+        const order = await env.DB.prepare("SELECT * FROM orders WHERE id=?").bind(orderId).first();
+        if (!order) return withCors(bad("Not found", 404));
+        if (order.buyer_id !== u.userId && order.seller_id !== u.userId && u.role !== "admin") {
+          return withCors(bad("Forbidden", 403));
+        }
 
 // ===== AUTO TRUST FOR AC AFTER 3 MINUTES =====
 const listingInfo = await env.DB.prepare(
