@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>Lịch sử nạp tiền</title>
+  <link rel="stylesheet" href="assets/style.css">
+  <style>
+    table { width:100%; border-collapse:collapse; }
+    th, td { border:2px solid #000; padding:8px; text-align:left; }
+    th { background:#000; color:#fff; }
+    .status { font-weight:bold; }
+    .pending { color:#d08c00; }
+    .paid { color:#0a0; }
+    .failed { color:#c00; }
+    .muted { opacity:.7; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <a href="/">SHOP</a>
+    <small>Lịch sử nạp tiền</small>
+  </div>
+  <nav>
+    <a href="/dashboard.html">Tài khoản</a>
+    <a href="/deposit.html">Nạp tiền</a>
+  </nav>
+</header>
+
+<main class="container">
+  <div class="box">
+    <h2>Lịch sử nạp tiền</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Thời gian</th>
+          <th>Hình thức</th>
+          <th>Số tiền</th>
+          <th>Phí</th>
+          <th>Thực nhận</th>
+          <th>Trạng thái</th>
+        </tr>
+      </thead>
+      <tbody id="rows">
+        <tr><td colspan="6" class="muted">Đang tải…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+<script src="assets/app.js"></script>
+<script>
+function statusText(s) {
+  if (s === "pending") return "<span class='status pending'>Đang xử lý</span>";
+  if (s === "paid") return "<span class='status paid'>Thành công</span>";
+  if (s === "failed") return "<span class='status failed'>Thất bại</span>";
+  return s;
+}
+
+function providerText(p) {
+  if (p === "bank_web2m") return "Ngân hàng";
+  if (p === "thesieure") return "Thẻ cào";
+  return p;
+}
+
+async function load() {
+  const r = await apiGet("/api/my/deposits");
+  if (!r.ok) {
+    rows.innerHTML = "<tr><td colspan='6'>Chưa đăng nhập</td></tr>";
+    return;
+  }
+
+  if (!r.items || r.items.length === 0) {
+    rows.innerHTML = "<tr><td colspan='6' class='muted'>Chưa có giao dịch nào</td></tr>";
+    return;
+  }
+
+  rows.innerHTML = "";
+  r.items.forEach(d => {
+    rows.innerHTML += `
+      <tr>
+        <td>${new Date(d.created_at).toLocaleString("vi-VN")}</td>
+        <td>${providerText(d.provider)}</td>
+        <td>${formatPrice(d.gross_cents)}</td>
+        <td>${formatPrice(d.fee_cents)}</td>
+        <td>${formatPrice(d.net_cents)}</td>
+        <td>${statusText(d.status)}</td>
+      </tr>
+    `;
+  });
+}
+
+load();
+</script>
+
+</body>
+</html>
