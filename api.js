@@ -20,6 +20,14 @@ export default {
         return withCors(ok({ ts: Date.now() }));
       }
 
+      if (url.pathname === "/api/_debug") {
+  return new Response(JSON.stringify({
+    pepper: typeof env.PASSWORD_PEPPER,
+    hasDB: !!env.DB
+  }), { headers: { "Content-Type": "application/json" } });
+}
+
+
       // -------- AUTH --------
       if (path === "/api/auth/register" && req.method === "POST") {
         const body = await readJson(req);
