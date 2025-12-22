@@ -427,7 +427,7 @@ if (path === "/api/orders" && req.method === "POST") {
   return withCors(ok({ order_id: orderId }));
 }
 
-// ===== ADMIN LIST DISPUTES =====
+// ===== ADMIN LIST DISPUTES (ONLY OPEN) =====
 if (path === "/api/admin/disputes" && req.method === "GET") {
   const admin = await requireAdmin(req, env);
   if (!admin) return withCors(bad("Unauthorized", 401));
@@ -441,11 +441,13 @@ if (path === "/api/admin/disputes" && req.method === "GET") {
      JOIN orders o ON o.id = d.order_id
      JOIN users bu ON bu.id = d.buyer_id
      JOIN users su ON su.id = d.seller_id
+     WHERE d.status='open'
      ORDER BY d.created_at DESC`
   ).all();
 
   return withCors(ok({ items: rows.results || [] }));
 }
+
 
 
       // GET /api/orders/:id
