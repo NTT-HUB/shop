@@ -634,6 +634,43 @@ if (path === "/api/admin/withdrawals" && req.method === "GET") {
   return withCors(ok({ items: rows.results || [] }));
 }
 
+// ===== ADMIN DASHBOARD =====
+if (path === "/api/admin/dashboard" && req.method === "GET") {
+  const admin = await requireAdmin(req, env);
+  if (!admin) return withCors(bad("Unauthorized", 401));
+
+  const users = await env.DB.prepare(
+    "SELECT COUNT(*) as total, SUM(status='active') as active FROM users"
+  ).first();
+
+  const listings = await env.DB.prepare(
+    "SELECT COUNT(*) as total FROM listings WHERE status='active'"
+  ).first();
+
+  const balances = await env.DB.prepare(
+    "SELECT SUM(balance_cents) as total FROM wallets"
+  ).first();
+
+  const disputes = await env.DB.prepare(
+    "SELECT COUNT(*) as total FROM disputes WHERE status='open'"
+  ).first();
+
+  const withdrawals = await env.DB.prepare(
+    "SELECT COUNT(*) as total FROM withdrawals WHERE status='pending'"
+  ).first();
+
+  return withCors(ok({
+    users: {
+      total: users?.total || 0,
+      active: users?.active || 0
+    },
+    listings: listings?.total || 0,
+    wallet_total_cents: balances?.total || 0,
+    disputes: disputes?.total || 0,
+    withdrawals: withdrawals?.total || 0
+  }));
+}
+
 
 // ===== WITHDRAW (MANUAL) =====
 if (path === "/api/withdraw" && req.method === "POST") {
