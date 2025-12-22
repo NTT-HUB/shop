@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>Admin – Duyệt rút tiền</title>
+  <link rel="stylesheet" href="assets/style.css">
+  <style>
+    .item { border:2px solid #000; padding:12px; margin-bottom:12px; }
+    .btn { border:2px solid #000; padding:6px 10px; cursor:pointer; }
+    .approve { background:#0a0; color:#fff; }
+    .reject { background:#c00; color:#fff; }
+    pre { background:#111; color:#0f0; padding:8px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <a href="/">SHOP</a>
+    <small>Admin – Rút tiền</small>
+  </div>
+  <nav>
+    <a href="/dashboard.html">Tài khoản</a>
+  </nav>
+</header>
+
+<main class="container">
+  <div class="box">
+    <h2>Danh sách rút tiền</h2>
+    <div id="list">Đang tải…</div>
+  </div>
+</main>
+
+<script src="assets/app.js"></script>
+<script>
+async function loadWithdrawals() {
+  const r = await apiGet("/api/admin/withdrawals");
+  const box = document.getElementById("list");
+  box.innerHTML = "";
+
+  if (!r.ok) {
+    box.innerHTML = "<p class='muted'>Không có quyền admin</p>";
+    return;
+  }
+
+  if (!r.items || r.items.length === 0) {
+    box.innerHTML = "<p class='muted'>Không có đơn rút nào</p>";
+    return;
+  }
+
+  r.items.forEach(w => {
+    box.innerHTML += `
+      <div class="item">
+        <b>User:</b> ${w.username}<br>
+        <b>Số tiền:</b> ${formatPrice(w.gross_cents)}<br>
+        <b>Phí:</b> ${formatPrice(w.fee_cents)}<br>
+        <b>Thực nhận:</b> ${formatPrice(w.net_cents)}<br>
+        <b>Thông tin:</b>
+        <pre>${w.bank_info}</pre>
+
+        <button class="btn approve" onclick="decide('${w.id}','approve')">Hoàn thành</button>
+        <button class="btn reject" onclick="decide('${w.id}','reject')">Hủy</button>
+      </div>
+    `;
+  });
+}
+
+async function decide(id, action) {
+  if (!confirm("Xác nhận thao tác?")) return;
+
+  const r = await apiPost(`/api/admin/withdrawals/${id}/decision`, { action });
+  if (!r.ok) {
+    alert(r.error || "Thao tác thất bại");
+    return;
+  }
+
+  alert("Đã xử lý");
+  loadWithdrawals();
+}
+
+loadWithdrawals();
+</script>
+
+</body>
+</html>
