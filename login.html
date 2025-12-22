@@ -6,29 +6,36 @@
   <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
-<header>
-  <h1>LOGIN</h1>
-</header>
+  <header>
+    <div class="brand">
+      <a href="/">SHOP</a>
+      <small>Đăng nhập</small>
+    </div>
+    <nav>
+      <a href="register.html">Tạo tài khoản</a>
+    </nav>
+  </header>
 
-<div class="container">
-  <div class="box">
-    <input id="username" placeholder="Username">
-    <input id="password" type="password" placeholder="Password">
-    <button onclick="login()">Đăng nhập</button>
-    <p><a href="register.html">Tạo tài khoản</a></p>
-  </div>
-</div>
+  <main class="container">
+    <div class="box">
+      <h2>Đăng nhập</h2>
+      <input id="username" placeholder="Username">
+      <input id="password" type="password" placeholder="Password">
+      <button onclick="login()">Đăng nhập</button>
+      <p class="muted">Chưa có tài khoản? <a href="register.html">Đăng ký ngay</a></p>
+    </div>
+  </main>
 
-<script src="assets/app.js"></script>
-<script>
-async function login() {
-  const res = await apiPost("/api/auth/login", {
-    username: username.value,
-    password: password.value
-  });
-  if (res.ok) location.href = "dashboard.html";
-  else alert(res.error);
-}
-</script>
+  <script src="assets/app.js"></script>
+  <script>
+    async function login() {
+      const res = await apiPost("/api/auth/login", {
+        username: username.value,
+        password: password.value
+      });
+      if (res.ok) location.href = "dashboard.html";
+      else alert(res.error || "Đăng nhập thất bại");
+    }
+  </script>
 </body>
 </html>

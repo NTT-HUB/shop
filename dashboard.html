@@ -6,38 +6,49 @@
   <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
-<header>
-  <h1>DASHBOARD</h1>
-  <nav>
-    <a href="create.html">Đăng bán</a>
-    <a href="#" onclick="logout()">Logout</a>
-  </nav>
-</header>
+  <header>
+    <div class="brand">
+      <a href="/">SHOP</a>
+      <small>Tài khoản của bạn</small>
+    </div>
+    <nav>
+      <a href="create.html">Đăng bán</a>
+      <a href="#" onclick="logout()">Đăng xuất</a>
+    </nav>
+  </header>
 
-<div class="container">
-  <div class="box">
-    <p>User: <b id="u"></b></p>
-    <p>Số dư: <b id="b"></b></p>
-    <p>Uy tín: <b id="r"></b></p>
-  </div>
-</div>
+  <main class="container">
+    <div class="box">
+      <h2>Thông tin người dùng</h2>
+      <p>User: <b id="u"></b></p>
+      <p>Số dư: <b id="b"></b></p>
+      <p>Uy tín: <b id="r"></b></p>
+    </div>
+    <div id="authNotice" class="box muted" hidden>
+      Phiên đăng nhập đã hết hạn hoặc cookie bị chặn. Vui lòng <a href="login.html">đăng nhập lại</a> để tiếp tục.
+    </div>
+  </main>
 
-<script src="assets/app.js"></script>
-<script>
-async function load() {
-  const r = await fetch(API + "/api/me", { credentials: "include" });
-  if (r.status === 401) return location.href = "login.html";
-  const d = await r.json();
-  u.innerText = d.user.username;
-  b.innerText = d.balance_cents / 100 + " đ";
-  rEl.innerText = d.user.reputation;
-}
-async function logout() {
-  await apiPost("/api/auth/logout", {});
-  location.href = "login.html";
-}
-const rEl = document.getElementById("r");
-load();
-</script>
+  <script src="assets/app.js"></script>
+  <script>
+    async function load() {
+      const r = await fetch(API + "/api/me", { credentials: "include" });
+      if (r.status === 401) {
+        document.querySelector("main .box").hidden = true;
+        authNotice.hidden = false;
+        return;
+      }
+      const d = await r.json();
+      u.innerText = d.user.username;
+      b.innerText = formatPrice(d.balance_cents);
+      rEl.innerText = d.user.reputation;
+    }
+    async function logout() {
+      await apiPost("/api/auth/logout", {});
+      location.href = "login.html";
+    }
+    const rEl = document.getElementById("r");
+    load();
+  </script>
 </body>
 </html>
