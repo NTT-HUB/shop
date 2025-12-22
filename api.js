@@ -319,116 +319,84 @@ if (path === "/api/my/orders" && req.method === "GET") {
 
       // -------- PURCHASE --------
       if (path === "/api/orders" && req.method === "POST") {
-        const u = await requireAuth(req, env);
-        if (!u) return withCors(bad("Unauthorized", 401));
+  const u = await requireAuth(req, env);
+  if (!u) return withCors(bad("Unauthorized", 401));
 
-        const body = await readJson(req);
-        if (!body) return withCors(bad("Invalid JSON"));
+  const body = await readJson(req);
+  if (!body || !body.listing_id) return withCors(bad("Missing listing_id"));
 
-        const { listing_id, quantity } = body;
-        if (!listing_id) return withCors(bad("Missing listing_id"));
-        const qty = Math.max(1, Number(quantity || 1));
+  const qty = Math.max(1, Number(body.quantity || 1));
 
-        const listing = await env.DB.prepare(
-          "SELECT id, seller_id, kind, price_cents, quantity, status FROM listings WHERE id=?"
-        )
-          .bind(String(listing_id))
-          .first();
+  const listing = await env.DB.prepare(
+    "SELECT id, seller_id, kind, price_cents, quantity, status FROM listings WHERE id=?"
+  ).bind(body.listing_id).first();
 
-        if (!listing || listing.status !== "active") return withCors(bad("Listing not available", 404));
-        if (listing.seller_id === u.userId) return withCors(bad("Cannot buy your own listing", 400));
-        if (listing.quantity < qty) return withCors(bad("Not enough stock", 400));
+  if (!listing || listing.status !== "active")
+    return withCors(bad("Listing not available", 404));
 
-        const subtotal = listing.price_cents * qty;
-        const platformFee = Math.round(subtotal * 0.05);
-        const sellerIncome = subtotal - platformFee;
+  if (listing.seller_id === u.userId)
+    return withCors(bad("Cannot buy your own listing", 400));
 
-        const buyerWallet = await env.DB.prepare("SELECT balance_cents FROM wallets WHERE user_id=?")
-          .bind(u.userId)
-          .first();
-        if (!buyerWallet || buyerWallet.balance_cents < subtotal) return withCors(bad("Insufficient balance", 400));
+  if (listing.quantity < qty)
+    return withCors(bad("Not enough stock", 400));
 
-        const seller = await env.DB.prepare("SELECT status FROM users WHERE id=?")
-          .bind(listing.seller_id)
-          .first();
-        if (!seller || seller.status !== "active") return withCors(bad("Seller not available", 400));
+  const subtotal = listing.price_cents * qty;
+  const platformFee = Math.round(subtotal * 0.05);
+  const sellerIncome = subtotal - platformFee;
 
-        const now = Date.now();
-        const orderId = crypto.randomUUID();
+  const buyerWallet = await env.DB.prepare(
+    "SELECT balance_cents FROM wallets WHERE user_id=?"
+  ).bind(u.userId).first();
 
-        try {
-          await env.DB.prepare("BEGIN").run();
+  if (!buyerWallet || buyerWallet.balance_cents < subtotal)
+    return withCors(bad("Insufficient balance", 400));
 
-          const stockNow = await env.DB.prepare("SELECT quantity FROM listings WHERE id=?").bind(listing.id).first();
-          if (!stockNow || stockNow.quantity < qty) {
-            await env.DB.prepare("ROLLBACK").run();
-            return withCors(bad("Not enough stock", 400));
-          }
+  const now = Date.now();
+  const orderId = crypto.randomUUID();
 
-          const balNow = await env.DB.prepare("SELECT balance_cents FROM wallets WHERE user_id=?")
-            .bind(u.userId)
-            .first();
-          if (!balNow || balNow.balance_cents < subtotal) {
-            await env.DB.prepare("ROLLBACK").run();
-            return withCors(bad("Insufficient balance", 400));
-          }
+  // trừ tiền buyer
+  await env.DB.prepare(
+    "UPDATE wallets SET balance_cents = balance_cents - ?, updated_at=? WHERE user_id=?"
+  ).bind(subtotal, now, u.userId).run();
 
-          const newQty = stockNow.quantity - qty;
-          const newStatus = newQty === 0 ? "sold_out" : "active";
-          await env.DB.prepare("UPDATE listings SET quantity=?, status=?, updated_at=? WHERE id=?")
-            .bind(newQty, newStatus, now, listing.id)
-            .run();
+  // cộng tiền seller
+  await env.DB.prepare(
+    "UPDATE wallets SET balance_cents = balance_cents + ?, updated_at=? WHERE user_id=?"
+  ).bind(sellerIncome, now, listing.seller_id).run();
 
-          await env.DB.prepare(
-            `INSERT INTO orders
-             (id, buyer_id, seller_id, listing_id, unit_price_cents, quantity, subtotal_cents, platform_fee_cents, seller_income_cents, status, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'paid', ?)`
-          )
-            .bind(
-              orderId,
-              u.userId,
-              listing.seller_id,
-              listing.id,
-              listing.price_cents,
-              qty,
-              subtotal,
-              platformFee,
-              sellerIncome,
-              now
-            )
-            .run();
+  // cập nhật kho
+  const newQty = listing.quantity - qty;
+  await env.DB.prepare(
+    "UPDATE listings SET quantity=?, status=?, updated_at=? WHERE id=?"
+  ).bind(
+    newQty,
+    newQty === 0 ? "sold_out" : "active",
+    now,
+    listing.id
+  ).run();
 
-          await env.DB.prepare("UPDATE wallets SET balance_cents = balance_cents - ?, updated_at=? WHERE user_id=?")
-            .bind(subtotal, now, u.userId)
-            .run();
+  // tạo order
+  await env.DB.prepare(
+    `INSERT INTO orders
+     (id, buyer_id, seller_id, listing_id, unit_price_cents, quantity,
+      subtotal_cents, platform_fee_cents, seller_income_cents, status, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'paid', ?)`
+  ).bind(
+    orderId,
+    u.userId,
+    listing.seller_id,
+    listing.id,
+    listing.price_cents,
+    qty,
+    subtotal,
+    platformFee,
+    sellerIncome,
+    now
+  ).run();
 
-          await env.DB.prepare("UPDATE wallets SET balance_cents = balance_cents + ?, updated_at=? WHERE user_id=?")
-            .bind(sellerIncome, now, listing.seller_id)
-            .run();
+  return withCors(ok({ order_id: orderId }));
+}
 
-          await env.DB.prepare(
-            `INSERT INTO wallet_ledger (id, user_id, type, amount_cents, ref_type, ref_id, note, created_at)
-             VALUES (?, ?, 'purchase', ?, 'order', ?, ?, ?)`
-          )
-            .bind(crypto.randomUUID(), u.userId, -subtotal, orderId, `Buy listing ${listing.id}`, now)
-            .run();
-
-          await env.DB.prepare(
-            `INSERT INTO wallet_ledger (id, user_id, type, amount_cents, ref_type, ref_id, note, created_at)
-             VALUES (?, ?, 'sale_income', ?, 'order', ?, ?, ?)`
-          )
-            .bind(crypto.randomUUID(), listing.seller_id, sellerIncome, orderId, `Sold listing ${listing.id}`, now)
-            .run();
-
-          await env.DB.prepare("COMMIT").run();
-        } catch (e) {
-          console.error("PURCHASE ERROR:", e);
-          await env.DB.prepare("ROLLBACK").run().catch(() => {});
-          return withCors(bad("Purchase failed", 500));
-        }
-
-        return withCors(ok({ order_id: orderId }));
-      }
 
       // GET /api/orders/:id
       if (path.startsWith("/api/orders/") && req.method === "GET" && !path.endsWith("/secret") && !path.endsWith("/feedback")) {
