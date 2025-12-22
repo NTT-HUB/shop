@@ -1215,6 +1215,30 @@ async function depositCard() {
   `;
 }
 
+// ===== MY DEPOSITS HISTORY =====
+if (path === "/api/my/deposits" && req.method === "GET") {
+  const u = await requireAuth(req, env);
+  if (!u) return withCors(bad("Unauthorized", 401));
+
+  const rows = await env.DB.prepare(
+    `SELECT
+        id,
+        provider,
+        gross_cents,
+        fee_cents,
+        net_cents,
+        status,
+        created_at
+     FROM deposits
+     WHERE user_id=?
+     ORDER BY created_at DESC
+     LIMIT 100`
+  ).bind(u.userId).all();
+
+  return withCors(ok({
+    items: rows.results || []
+  }));
+}
 
 
       // -------- DISPUTES --------
