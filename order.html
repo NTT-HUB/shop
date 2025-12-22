@@ -1,40 +1,63 @@
 <!DOCTYPE html>
-<html>
+<html lang="vi">
 <head>
   <meta charset="utf-8" />
   <title>Đơn hàng</title>
   <link rel="stylesheet" href="assets/style.css">
   <style>
-    .btnRow{display:flex; gap:10px;}
-    .btnGreen{border:2px solid #000; background:#0a0; color:#fff;}
-    .btnRed{border:2px solid #000; background:#c00; color:#fff;}
-    .notice{border:2px solid #000; padding:15px; margin-top:15px;}
-    .hide{display:none;}
+    .notice { border:2px solid #000; padding:15px; margin-top:15px; }
+    .btnRow { display:flex; gap:10px; margin-top:10px; }
+    .btnGreen { background:#0a0; color:#fff; border:2px solid #000; }
+    .btnRed { background:#c00; color:#fff; border:2px solid #000; }
+    .hide { display:none; }
+    pre { background:#111; color:#0f0; padding:10px; overflow:auto; }
   </style>
 </head>
 <body>
+
 <header>
-  <h1>ĐƠN HÀNG</h1>
-  <nav><a href="dashboard.html">Dashboard</a></nav>
+  <div class="brand">
+    <a href="/">SHOP</a>
+    <small>Chi tiết đơn hàng</small>
+  </div>
+  <nav>
+    <a href="/dashboard.html">Tài khoản</a>
+  </nav>
 </header>
 
 <main class="container">
   <div class="box">
     <h2 id="title">...</h2>
-    <p>Giá: <b id="price"></b></p>
-    <p>Người bán: <b id="seller"></b></p>
-    <p>Liên hệ: <a id="contact" href="#" target="_blank">Nhấn để liên hệ</a></p>
 
-    <div id="acTimerBox" class="notice hide">
-      <b>AC bảo hành:</b> <span id="timer">03:00</span><br/>
-      Hết thời gian sẽ tự chốt uy tín, không giải quyết tranh chấp.
+    <p><b>Giá:</b> <span id="price"></span></p>
+    <p><b>Người bán:</b> <span id="seller"></span></p>
+    <p>
+      <b>Liên hệ:</b>
+      <a id="contact" href="#" target="_blank">Nhấn để liên hệ</a>
+    </p>
+
+    <!-- AC FILE -->
+    <div id="acBox" class="notice hide">
+      <h3>Thông tin tài khoản (AC)</h3>
+      <pre id="acSecret"></pre>
     </div>
 
+    <!-- TIMER -->
+    <div id="timerBox" class="notice hide">
+      <b>Bảo hành AC:</b>
+      <span id="timer">03:00</span><br>
+      Hết thời gian sẽ tự động chốt uy tín, không giải quyết tranh chấp.
+    </div>
+
+    <!-- VOTE -->
     <div id="voteBox" class="notice">
-      <p><b>Vui lòng liên hệ người bán qua link để nhận hàng.</b></p>
+      <p>
+        Bạn đã mua đơn hàng này.<br>
+        Vui lòng liên hệ người bán qua link để nhận hàng.
+      </p>
       <div class="btnRow">
-        <button class="btnGreen" onclick="trust()">UY TÍN</button>
-        <button class="btnRed" onclick="scam()">SCAM</button>
+        <button class="btnGreen" onclick="vote('trust')">UY TÍN</button>
+        <button class="btnRed" onclick="vote('scam')">SCAM</button>
       </div>
     </div>
   </div>
@@ -44,80 +67,123 @@
 <script>
 const orderId = new URLSearchParams(location.search).get("id");
 
-let orderKind = "product";
+let order = null;
+let listing = null;
 let warrantyUntil = null;
+let orderKind = "product";
 
-function fmtTime(ms) {
-  const s = Math.max(0, Math.floor(ms/1000));
-  const mm = String(Math.floor(s/60)).padStart(2,"0");
-  const ss = String(s%60).padStart(2,"0");
-  return `${mm}:${ss}`;
-}
-
+// ===== LOAD ORDER =====
 async function load() {
-  const r = await fetch(API + "/api/orders/" + orderId, { credentials: "include" });
-  const d = await r.json();
-  if (!d.ok) { alert(d.error || "Load order failed"); location.href="dashboard.html"; return; }
+  const r = await fetch(API + "/api/orders/" + orderId, {
+    credentials: "include"
+  }).then(r => r.json());
 
-  const o = d.order;
-  // Nếu API bạn chưa join listing/title/contact, bạn dùng /api/my/orders để show list.
-  // Ở bản API mình đưa ở trên, /api/my/orders có đủ title/contact/kind.
-  // Tạm: load listing detail để lấy contact/title/kind:
-  const listing = await apiGet("/api/listings/" + o.listing_id);
+  if (!r.ok) {
+    alert(r.error || "Không tìm thấy đơn hàng");
+    location.href = "/dashboard.html";
+    return;
+  }
 
-  orderKind = listing?.item?.kind || "product";
-  document.getElementById("title").innerText = listing?.item?.title || ("Order " + o.id);
-  document.getElementById("price").innerText = formatPrice(o.subtotal_cents);
-  document.getElementById("seller").innerText = (listing?.item?.seller_username || o.seller_id);
+  order = r.order;
 
-  const link = listing?.item?.contact_link || "#";
-  const a = document.getElementById("contact");
-  a.href = link; a.innerText = link === "#" ? "(không có)" : "Nhấn để liên hệ";
+  // lấy thông tin listing
+  const l = await apiGet("/api/listings/" + order.listing_id);
+  if (!l.ok) {
+    alert("Không tìm thấy sản phẩm");
+    return;
+  }
 
+  listing = l.item;
+  orderKind = listing.kind;
+
+  // render
+  title.innerText = listing.title;
+  price.innerText = formatPrice(order.subtotal_cents);
+  seller.innerText = listing.seller_username;
+  contact.href = listing.contact_link || "#";
+
+  // nếu là AC
   if (orderKind === "ac") {
-    warrantyUntil = o.created_at + 3*60*1000;
-    document.getElementById("acTimerBox").classList.remove("hide");
-    startTimer();
+    await loadAC();
   }
 }
 
-async function trust() {
-  const res = await apiPost("/api/orders/" + orderId + "/feedback", { type: "trust" });
-  if (res.ok) document.getElementById("voteBox").classList.add("hide");
-  else alert(res.error);
-}
+// ===== LOAD AC SECRET =====
+async function loadAC() {
+  // lấy file AC
+  const s = await fetch(API + "/api/orders/" + orderId + "/secret", {
+    credentials: "include"
+  }).then(r => r.json());
 
-async function scam() {
-  const desc = prompt("Mô tả scam (bắt buộc):");
-  if (!desc) return;
-
-  // tạo dispute
-  const res = await apiPost("/api/disputes", { order_id: orderId, description: desc });
-  if (res.ok) {
-    alert("Đã gửi tranh chấp, admin sẽ xem xét.");
-    document.getElementById("voteBox").classList.add("hide");
-  } else {
-    alert(res.error);
+  if (s.ok && s.secret_txt) {
+    acSecret.innerText = s.secret_txt;
+    acBox.classList.remove("hide");
   }
+
+  // setup timer 3 phút (DÙNG order.created_at)
+  warrantyUntil = order.created_at + 3 * 60 * 1000;
+  timerBox.classList.remove("hide");
+  startTimer();
 }
 
+// ===== TIMER =====
 function startTimer() {
-  const tick = async () => {
+  function tick() {
     const left = warrantyUntil - Date.now();
-    document.getElementById("timer").innerText = fmtTime(left);
 
     if (left <= 0) {
-      // hết hạn => auto trust (frontend cũng có thể gọi trust để chốt ngay)
-      document.getElementById("voteBox").classList.add("hide");
-      try { await trust(); } catch(e) {}
+      timer.innerText = "00:00";
+      voteBox.classList.add("hide");
       return;
     }
+
+    const s = Math.floor(left / 1000);
+    const mm = String(Math.floor(s / 60)).padStart(2, "0");
+    const ss = String(s % 60).padStart(2, "0");
+    timer.innerText = `${mm}:${ss}`;
+
     setTimeout(tick, 1000);
-  };
+  }
   tick();
 }
 
+// ===== VOTE =====
+async function vote(type) {
+  if (type === "scam") {
+    const note = prompt("Mô tả scam (bắt buộc):");
+    if (!note) return;
+
+    const d = await apiPost("/api/disputes", {
+      order_id: orderId,
+      description: note
+    });
+
+    if (!d.ok) {
+      alert(d.error);
+      return;
+    }
+
+    alert("Đã gửi tranh chấp. Admin sẽ xem xét.");
+    voteBox.classList.add("hide");
+    return;
+  }
+
+  // trust
+  const r = await apiPost("/api/orders/" + orderId + "/feedback", {
+    type: "trust"
+  });
+
+  if (!r.ok) {
+    alert(r.error);
+    return;
+  }
+
+  voteBox.classList.add("hide");
+}
+
+// ===== INIT =====
 load();
 </script>
+
 </body>
 </html>
