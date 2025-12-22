@@ -90,10 +90,10 @@
       </select>
 
       <label>Mã thẻ</label>
-      <input id="card_code" placeholder="Nhập mã thẻ">
+      <input id="card_code">
 
       <label>Seri</label>
-      <input id="card_serial" placeholder="Nhập số seri">
+      <input id="card_serial">
 
       <button class="btn block" onclick="depositCard()">Nạp thẻ</button>
 
@@ -111,7 +111,7 @@ function showTab(tab) {
   document.getElementById(tab).classList.add("active");
 }
 
-// ===== BANK =====
+/* ================= BANK ================= */
 async function depositBank() {
   const vnd = Number(bank_amount.value.replace(/[^0-9]/g,""));
   if (!vnd || vnd < 10000)
@@ -119,37 +119,62 @@ async function depositBank() {
 
   const r = await apiPost("/api/deposits/create", {
     method: "bank",
-    amount_cents: vnd * 100
+    amount: vnd
   });
 
   if (!r.ok) return alert(r.error || "Không thể tạo yêu cầu");
 
-  // VietQR URL (API đã trả sẵn)
-  const qrUrl = r.vietqr_url;
+  /*
+    API cần trả:
+    r.bank_name
+    r.bank_account_name
+    r.bank_account_number
+    r.pay_code
+    r.amount
+    r.fee
+    r.net
+  */
+
+  const qrUrl = buildVietQR({
+    bank: r.bank_name,
+    account: r.bank_account_number,
+    name: r.bank_account_name,
+    amount: r.amount,
+    memo: r.pay_code
+  });
 
   bank_out.innerHTML = `
     <div class="note">
       <b>Thông tin chuyển khoản</b><br><br>
 
-      <b>Ngân hàng:</b> ${r.bank_display_name}<br>
-      <b>Số tài khoản:</b> ${r.bank_account}<br>
+      <b>Ngân hàng:</b> ${r.bank_name}<br>
+      <b>Chủ tài khoản:</b> ${r.bank_account_name}<br>
+      <b>Số tài khoản:</b> ${r.bank_account_number}<br>
       <b>Nội dung:</b> <code>${r.pay_code}</code><br><br>
 
-      <b>Số tiền:</b> ${formatPrice(r.gross_cents)}<br>
-      <b>Phí:</b> ${formatPrice(r.fee_cents)}<br>
-      <b>Thực nhận:</b> ${formatPrice(r.net_cents)}<br><br>
+      <b>Số tiền:</b> ${formatPrice(r.amount)}<br>
+      <b>Phí:</b> ${formatPrice(r.fee)}<br>
+      <b>Thực nhận:</b> ${formatPrice(r.net)}<br><br>
 
-      <b>QR Nạp nhanh (VietQR / NAPAS)</b><br>
+      <b>QR chuyển khoản (VietQR / NAPAS)</b><br>
       <img class="qr" src="${qrUrl}"><br>
+
       <p class="muted">
-        Quét QR để chuyển khoản nhanh – đúng nội dung.<br>
-        <b>Không sửa nội dung chuyển khoản.</b>
+        Quét QR để chuyển khoản nhanh.<br>
+        <b>KHÔNG sửa nội dung chuyển khoản.</b>
       </p>
     </div>
   `;
 }
 
-// ===== CARD =====
+/* VietQR chuẩn */
+function buildVietQR({ bank, account, name, amount, memo }) {
+  const base = "https://img.vietqr.io/image";
+  const bankCode = bank.replace(/\s+/g, "").toLowerCase();
+  return `${base}/${bankCode}-${account}-qr_only.png?amount=${amount}&addInfo=${encodeURIComponent(memo)}&accountName=${encodeURIComponent(name)}`;
+}
+
+/* ================= CARD ================= */
 async function depositCard() {
   if (!card_type.value || !card_amount.value || !card_code.value || !card_serial.value)
     return alert("Vui lòng nhập đầy đủ thông tin thẻ");
