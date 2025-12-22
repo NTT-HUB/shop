@@ -68,7 +68,7 @@
 <script src="assets/app.js"></script>
 <script>
 async function load() {
-  const r = await apiGet("/api/admin/settings");
+  const r = await apiGet("/api/admin/settings?_=" + Date.now());
   if (!r.ok) {
     alert(r.error || "Không có quyền admin");
     return;
