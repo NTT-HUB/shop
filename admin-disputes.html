@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>Admin – Duyệt Scam</title>
+  <link rel="stylesheet" href="assets/style.css">
+  <style>
+    .item { border:2px solid #000; padding:12px; margin-bottom:12px; }
+    .row { display:flex; gap:10px; margin-top:10px; }
+    .btn { border:2px solid #000; padding:6px 10px; cursor:pointer; }
+    .approve { background:#0a0; color:#fff; }
+    .reject { background:#c00; color:#fff; }
+    textarea { width:100%; height:60px; }
+    .muted { opacity:.7; }
+    img { max-width:300px; display:block; margin-top:10px; border:2px solid #000; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <a href="/">SHOP</a>
+    <small>Admin – Duyệt Scam</small>
+  </div>
+  <nav>
+    <a href="/dashboard.html">Tài khoản</a>
+  </nav>
+</header>
+
+<main class="container">
+  <div class="box">
+    <h2>Danh sách tranh chấp</h2>
+    <div id="list">Đang tải…</div>
+  </div>
+</main>
+
+<script src="assets/app.js"></script>
+<script>
+async function loadDisputes() {
+  const r = await apiGet("/api/admin/disputes");
+  const box = document.getElementById("list");
+  box.innerHTML = "";
+
+  if (!r.ok) {
+    box.innerHTML = "<p class='muted'>Không có quyền admin</p>";
+    return;
+  }
+
+  if (!r.items || r.items.length === 0) {
+    box.innerHTML = "<p class='muted'>Không có tranh chấp nào</p>";
+    return;
+  }
+
+  r.items.forEach(d => {
+    box.innerHTML += renderItem(d);
+  });
+}
+
+function renderItem(d) {
+  return `
+    <div class="item">
+      <b>Đơn:</b> ${d.order_id}<br>
+      <b>Người mua:</b> ${d.buyer_username}<br>
+      <b>Người bán:</b> ${d.seller_username}<br>
+      <b>Số tiền:</b> ${formatPrice(d.subtotal_cents)}<br><br>
+
+      <b>Nội dung tố cáo:</b>
+      <p>${d.description}</p>
+
+      ${d.evidence_image_key ? `<img src="${d.evidence_image_key}">` : ""}
+
+      <textarea placeholder="Ghi chú admin" id="note-${d.id}"></textarea>
+
+      <div class="row">
+        <button class="btn approve" onclick="decide('${d.id}','approve')">
+          Duyệt scam (Hoàn tiền + khóa seller)
+        </button>
+        <button class="btn reject" onclick="decide('${d.id}','reject')">
+          Từ chối
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+async function decide(id, action) {
+  if (!confirm("Xác nhận thao tác?")) return;
+
+  const note = document.getElementById("note-" + id).value;
+
+  const r = await apiPost(`/api/admin/disputes/${id}/decision`, {
+    action,
+    admin_note: note
+  });
+
+  if (!r.ok) {
+    alert(r.error || "Thao tác thất bại");
+    return;
+  }
+
+  alert("Đã xử lý");
+  loadDisputes();
+}
+
+loadDisputes();
+</script>
+
+</body>
+</html>
