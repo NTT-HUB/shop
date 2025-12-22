@@ -14,3 +14,13 @@ async function apiPost(url, body) {
   });
   return r.json();
 }
+
+function formatPrice(cents) {
+  if (cents == null || Number.isNaN(Number(cents))) return "0 đ";
+  return (Number(cents) / 100).toLocaleString("vi-VN") + " đ";
+}
+
+function sanitizeNumberInput(value) {
+  const n = Number(String(value).replace(/[^0-9.]/g, ""));
+  return Number.isFinite(n) ? n : 0;
+}

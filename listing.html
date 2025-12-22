@@ -6,33 +6,93 @@
   <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
-<header>
-  <h1 id="t"></h1>
-</header>
+  <header>
+    <div class="brand">
+      <a href="/">SHOP</a>
+      <small>Chi tiết sản phẩm</small>
+    </div>
+    <nav>
+      <a href="/dashboard.html">Tài khoản</a>
+      <a href="/login.html">Đăng nhập</a>
+    </nav>
+  </header>
 
-<div class="container">
-  <div class="box">
-    <p>Giá: <b id="p"></b></p>
-    <p>Người bán: <b id="s"></b></p>
-    <button onclick="buy()">Mua</button>
-  </div>
-</div>
+  <main class="container">
+    <article class="box">
+      <div class="item-head">
+        <span class="badge" id="kindBadge"></span>
+        <span id="status" class="muted"></span>
+      </div>
+      <h1 id="t"></h1>
+      <p class="muted" id="desc"></p>
 
-<script src="assets/app.js"></script>
-<script>
-const id = new URLSearchParams(location.search).get("id");
-async function load() {
-  const d = await apiGet("/api/listings/" + id);
-  t.innerText = d.item.title;
-  p.innerText = d.item.price_cents / 100 + " đ";
-  s.innerText = d.item.seller_username;
-}
-async function buy() {
-  const r = await apiPost("/api/orders", { listing_id: id, quantity: 1 });
-  if (r.ok) alert("Mua thành công");
-  else alert(r.error);
-}
-load();
-</script>
+      <div class="detail-grid">
+        <div>
+          <div class="label">Giá</div>
+          <div class="price" id="p"></div>
+        </div>
+        <div>
+          <div class="label">Tồn kho</div>
+          <div id="qty"></div>
+        </div>
+        <div>
+          <div class="label">Người bán</div>
+          <div id="s"></div>
+          <div class="muted">Uy tín: <span id="rep"></span></div>
+        </div>
+        <div>
+          <div class="label">Liên hệ</div>
+          <a id="contact" target="_blank" rel="noreferrer noopener">Mở liên hệ</a>
+        </div>
+      </div>
+
+      <div class="muted">Nếu là Tài khoản (AC), nội dung bí mật sẽ hiển thị sau khi bạn thanh toán.</div>
+      <div class="action-row">
+        <button id="buyBtn" class="btn primary" onclick="buy()">Mua ngay</button>
+      </div>
+    </article>
+  </main>
+
+  <script src="assets/app.js"></script>
+  <script>
+    const id = new URLSearchParams(location.search).get("id");
+    const buyBtn = document.getElementById("buyBtn");
+
+    async function load() {
+      const d = await apiGet("/api/listings/" + id);
+      const item = d.item;
+      t.innerText = item.title;
+      p.innerText = formatPrice(item.price_cents);
+      s.innerText = item.seller_username;
+      rep.innerText = item.seller_reputation ?? 0;
+      qty.innerText = item.quantity ?? 0;
+      desc.innerText = item.description || "Không có mô tả";
+      contact.href = item.contact_link || "#";
+      contact.innerText = item.contact_link ? "Mở liên hệ" : "Chưa cung cấp";
+
+      kindBadge.innerText = item.kind === "ac" ? "Tài khoản (AC)" : "Sản phẩm";
+      kindBadge.classList.add(item.kind === "ac" ? "badge-warning" : "badge-info");
+
+      status.innerText = item.status === "sold_out" ? "Hết hàng" : "Đang mở bán";
+      const soldOut = item.status === "sold_out" || (item.quantity ?? 0) <= 0;
+      buyBtn.disabled = soldOut;
+      buyBtn.innerText = soldOut ? "Hết hàng" : "Mua ngay";
+    }
+
+    async function buy() {
+      buyBtn.disabled = true;
+      buyBtn.innerText = "Đang xử lý...";
+      const r = await apiPost("/api/orders", { listing_id: id, quantity: 1 });
+      if (r.ok) {
+        alert("Mua thành công");
+        load();
+      } else {
+        alert(r.error || "Không thể mua, vui lòng thử lại");
+        buyBtn.disabled = false;
+        buyBtn.innerText = "Mua ngay";
+      }
+    }
+    load();
+  </script>
 </body>
 </html>
