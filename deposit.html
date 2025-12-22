@@ -119,24 +119,13 @@ async function depositBank() {
 
   const r = await apiPost("/api/deposits/create", {
     method: "bank",
-    amount: vnd
+    amount_cents: vnd * 100
   });
 
   if (!r.ok) return alert(r.error || "Không thể tạo yêu cầu");
 
-  /*
-    API cần trả:
-    r.bank_name
-    r.bank_account_name
-    r.bank_account_number
-    r.pay_code
-    r.amount
-    r.fee
-    r.net
-  */
-
   const qrUrl = buildVietQR({
-    bank: r.bank_name,
+    bankCode: r.bank_code, // backend trả
     account: r.bank_account_number,
     name: r.bank_account_name,
     amount: r.amount,
@@ -156,23 +145,20 @@ async function depositBank() {
       <b>Phí:</b> ${formatPrice(r.fee)}<br>
       <b>Thực nhận:</b> ${formatPrice(r.net)}<br><br>
 
-      <b>QR chuyển khoản (VietQR / NAPAS)</b><br>
-      <img class="qr" src="${qrUrl}"><br>
-
-      <p class="muted">
-        Quét QR để chuyển khoản nhanh.<br>
-        <b>KHÔNG sửa nội dung chuyển khoản.</b>
-      </p>
+      <b>QR chuyển khoản (VietQR)</b><br>
+      <img class="qr" src="${qrUrl}">
     </div>
   `;
 }
 
-/* VietQR chuẩn */
-function buildVietQR({ bank, account, name, amount, memo }) {
-  const base = "https://img.vietqr.io/image";
-  const bankCode = bank.replace(/\s+/g, "").toLowerCase();
-  return `${base}/${bankCode}-${account}-qr_only.png?amount=${amount}&addInfo=${encodeURIComponent(memo)}&accountName=${encodeURIComponent(name)}`;
+
+function buildVietQR({ bankCode, account, name, amount, memo }) {
+  return `https://img.vietqr.io/image/${bankCode}-${account}-qr_only.png`
+    + `?amount=${amount}`
+    + `&addInfo=${encodeURIComponent(memo)}`
+    + `&accountName=${encodeURIComponent(name)}`;
 }
+
 
 /* ================= CARD ================= */
 async function depositCard() {
