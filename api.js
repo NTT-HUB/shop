@@ -318,12 +318,14 @@ if (path === "/api/my/orders" && req.method === "GET") {
       }
 
       // -------- PURCHASE --------
-      if (path === "/api/orders" && req.method === "POST") {
+  // POST /api/orders (BUY)
+if (path === "/api/orders" && req.method === "POST") {
   const u = await requireAuth(req, env);
   if (!u) return withCors(bad("Unauthorized", 401));
 
   const body = await readJson(req);
-  if (!body || !body.listing_id) return withCors(bad("Missing listing_id"));
+  if (!body || !body.listing_id)
+    return withCors(bad("Missing listing_id"));
 
   const qty = Math.max(1, Number(body.quantity || 1));
 
@@ -354,17 +356,17 @@ if (path === "/api/my/orders" && req.method === "GET") {
   const now = Date.now();
   const orderId = crypto.randomUUID();
 
-  // trừ tiền buyer
+  // 1️⃣ trừ tiền buyer
   await env.DB.prepare(
     "UPDATE wallets SET balance_cents = balance_cents - ?, updated_at=? WHERE user_id=?"
   ).bind(subtotal, now, u.userId).run();
 
-  // cộng tiền seller
+  // 2️⃣ cộng tiền seller
   await env.DB.prepare(
     "UPDATE wallets SET balance_cents = balance_cents + ?, updated_at=? WHERE user_id=?"
   ).bind(sellerIncome, now, listing.seller_id).run();
 
-  // cập nhật kho
+  // 3️⃣ cập nhật tồn kho
   const newQty = listing.quantity - qty;
   await env.DB.prepare(
     "UPDATE listings SET quantity=?, status=?, updated_at=? WHERE id=?"
@@ -375,7 +377,7 @@ if (path === "/api/my/orders" && req.method === "GET") {
     listing.id
   ).run();
 
-  // tạo order
+  // 4️⃣ tạo order
   await env.DB.prepare(
     `INSERT INTO orders
      (id, buyer_id, seller_id, listing_id, unit_price_cents, quantity,
@@ -394,21 +396,36 @@ if (path === "/api/my/orders" && req.method === "GET") {
     now
   ).run();
 
+  // 5️⃣ ghi lịch sử MUA (buyer)
+  await env.DB.prepare(
+    `INSERT INTO wallet_ledger
+     (id, user_id, type, amount_cents, ref_type, ref_id, note, created_at)
+     VALUES (?, ?, 'purchase', ?, 'order', ?, ?, ?)`
+  ).bind(
+    crypto.randomUUID(),
+    u.userId,
+    -subtotal,
+    orderId,
+    `Mua đơn hàng ${orderId}`,
+    now
+  ).run();
+
+  // 6️⃣ ghi lịch sử BÁN (seller)
+  await env.DB.prepare(
+    `INSERT INTO wallet_ledger
+     (id, user_id, type, amount_cents, ref_type, ref_id, note, created_at)
+     VALUES (?, ?, 'sale_income', ?, 'order', ?, ?, ?)`
+  ).bind(
+    crypto.randomUUID(),
+    listing.seller_id,
+    sellerIncome,
+    orderId,
+    `Bán đơn hàng ${orderId}`,
+    now
+  ).run();
+
   return withCors(ok({ order_id: orderId }));
 }
-
-
-      // GET /api/orders/:id
-      if (path.startsWith("/api/orders/") && req.method === "GET" && !path.endsWith("/secret") && !path.endsWith("/feedback")) {
-        const u = await requireAuth(req, env);
-        if (!u) return withCors(bad("Unauthorized", 401));
-
-        const orderId = path.split("/").pop();
-        const order = await env.DB.prepare("SELECT * FROM orders WHERE id=?").bind(orderId).first();
-        if (!order) return withCors(bad("Not found", 404));
-        if (order.buyer_id !== u.userId && order.seller_id !== u.userId && u.role !== "admin") {
-          return withCors(bad("Forbidden", 403));
-        }
 
 // ===== AUTO TRUST FOR AC AFTER 3 MINUTES =====
 const listingInfo = await env.DB.prepare(
