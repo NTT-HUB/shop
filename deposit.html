@@ -122,27 +122,25 @@ async function depositCard() {
   if (!card_type.value || !card_amount.value || !card_code.value || !card_serial.value)
     return alert("Nhập đầy đủ thông tin thẻ");
 
-  const r = await apiPost("/api/deposits/create", {
-    method: "card",
-    amount_cents: Number(card_amount.value) * 100,
+  const r = await apiPost("/api/card/submit", {
     card: {
       type: card_type.value,
+      amount: Number(card_amount.value),
       code: card_code.value,
       serial: card_serial.value
     }
   });
-  if (!r.ok) return alert(r.error);
+
+  if (!r.ok) return alert(r.error || "Nạp thẻ thất bại");
 
   card_out.innerHTML = `
     <div class="note">
       <b>Đã gửi thẻ thành công</b><br>
-      Mệnh giá: ${formatPrice(r.gross_cents)}<br>
-      Phí: ${formatPrice(r.fee_cents)}<br>
-      Thực nhận: ${formatPrice(r.net_cents)}<br>
-      <p class="muted">Thẻ sẽ được duyệt tự động</p>
+      <p class="muted">Thẻ đang được xử lý, tiền sẽ vào ví sau vài giây.</p>
     </div>
   `;
 }
+
 </script>
 
 </body>
