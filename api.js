@@ -560,6 +560,64 @@ if (listingInfo?.kind === "ac") {
         return withCors(ok());
       }
 
+      // ===== ADMIN DECIDE WITHDRAW =====
+if (path.startsWith("/api/admin/withdrawals/") && path.endsWith("/decision") && req.method === "POST") {
+  const admin = await requireAdmin(req, env);
+  if (!admin) return withCors(bad("Unauthorized", 401));
+
+  const id = path.split("/")[4];
+  const body = await readJson(req);
+  if (!body || !body.action) return withCors(bad("Missing action"));
+
+  const w = await env.DB.prepare(
+    "SELECT * FROM withdrawals WHERE id=?"
+  ).bind(id).first();
+
+  if (!w) return withCors(bad("Not found", 404));
+  if (w.status !== "pending") return withCors(bad("Already processed", 409));
+
+  const now = Date.now();
+
+  // ===== HỦY =====
+  if (body.action === "reject") {
+    // hoàn tiền nhưng trừ phí 2%
+    await env.DB.prepare(
+      "UPDATE wallets SET balance_cents = balance_cents + ?, updated_at=? WHERE user_id=?"
+    ).bind(w.net_cents, now, w.user_id).run();
+
+    await env.DB.prepare(
+      `INSERT INTO wallet_ledger
+       (id, user_id, type, amount_cents, ref_type, ref_id, note, created_at)
+       VALUES (?, ?, 'refund', ?, 'withdraw', ?, ?, ?)`
+    ).bind(
+      crypto.randomUUID(),
+      w.user_id,
+      w.net_cents,
+      w.id,
+      "Hoàn tiền rút (bị trừ 2% phí)",
+      now
+    ).run();
+
+    await env.DB.prepare(
+      "UPDATE withdrawals SET status='rejected', admin_id=?, updated_at=? WHERE id=?"
+    ).bind(admin.userId, now, id).run();
+
+    return withCors(ok({ status: "rejected" }));
+  }
+
+  // ===== HOÀN THÀNH =====
+  if (body.action === "approve") {
+    await env.DB.prepare(
+      "UPDATE withdrawals SET status='paid', admin_id=?, updated_at=? WHERE id=?"
+    ).bind(admin.userId, now, id).run();
+
+    return withCors(ok({ status: "paid" }));
+  }
+
+  return withCors(bad("Invalid action"));
+}
+
+
 // ===== WITHDRAW (MANUAL) =====
 if (path === "/api/withdraw" && req.method === "POST") {
   const u = await requireAuth(req, env);
