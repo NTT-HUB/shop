@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>Đơn hàng của tôi</title>
+  <link rel="stylesheet" href="assets/style.css">
+  <style>
+    .item { border:2px solid #000; padding:12px; margin-bottom:12px; }
+    .btn { border:2px solid #000; padding:6px 10px; cursor:pointer; }
+    .btn-ac { background:#111; color:#0f0; }
+    .muted { opacity:.7; }
+    pre { background:#000; color:#0f0; padding:10px; margin-top:10px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <a href="/">SHOP</a>
+    <small>Đơn hàng của tôi</small>
+  </div>
+  <nav>
+    <a href="/dashboard.html">Tài khoản</a>
+  </nav>
+</header>
+
+<main class="container">
+  <div class="box">
+    <h2>Danh sách đơn hàng</h2>
+    <div id="list">Đang tải…</div>
+  </div>
+</main>
+
+<script src="assets/app.js"></script>
+<script>
+async function loadOrders() {
+  const r = await apiGet("/api/my/orders");
+  const box = document.getElementById("list");
+
+  box.innerHTML = "";
+
+  if (!r.ok || !r.items || r.items.length === 0) {
+    box.innerHTML = "<p class='muted'>Chưa có đơn hàng nào</p>";
+    return;
+  }
+
+  r.items.forEach(o => {
+    if (o.kind === "product") {
+      box.innerHTML += renderProduct(o);
+    } else {
+      box.innerHTML += renderAC(o);
+    }
+  });
+}
+
+function renderProduct(o) {
+  return `
+    <div class="item">
+      <b>${o.title}</b><br>
+      <span class="muted">
+        Số lượng: ${o.quantity} |
+        Giá: ${formatPrice(o.subtotal_cents)}
+      </span><br>
+      <small>Người bán: ${o.seller_username}</small>
+    </div>
+  `;
+}
+
+function renderAC(o) {
+  return `
+    <div class="item">
+      <b>${o.title} (AC)</b><br>
+      <span class="muted">
+        Giá: ${formatPrice(o.subtotal_cents)}
+      </span><br>
+      <small>Người bán: ${o.seller_username}</small><br><br>
+      <button class="btn btn-ac" onclick="viewAC('${o.id}', this)">
+        Xem thông tin AC
+      </button>
+      <div class="ac-box"></div>
+    </div>
+  `;
+}
+
+async function viewAC(orderId, btn) {
+  btn.disabled = true;
+  btn.innerText = "Đang tải…";
+
+  const r = await fetch(API + "/api/orders/" + orderId + "/secret", {
+    credentials: "include"
+  }).then(r => r.json());
+
+  if (!r.ok) {
+    alert(r.error || "Không lấy được thông tin AC");
+    btn.disabled = false;
+    btn.innerText = "Xem thông tin AC";
+    return;
+  }
+
+  const box = btn.nextElementSibling;
+  box.innerHTML = `<pre>${r.secret_txt}</pre>`;
+  btn.remove();
+}
+
+loadOrders();
+</script>
+
+</body>
+</html>
