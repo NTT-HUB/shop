@@ -10,8 +10,10 @@
     .btn { border:2px solid #000; padding:6px 10px; cursor:pointer; }
     .approve { background:#0a0; color:#fff; }
     .reject { background:#c00; color:#fff; }
+    .disabled { opacity:.5; pointer-events:none; }
     textarea { width:100%; height:60px; }
     .muted { opacity:.7; }
+    .status { font-weight:bold; }
     img { max-width:300px; display:block; margin-top:10px; border:2px solid #000; }
   </style>
 </head>
@@ -23,13 +25,13 @@
     <small>Admin – Duyệt Scam</small>
   </div>
   <nav>
-    <a href="/dashboard.html">Tài khoản</a>
+    <a href="/admin-dashboard.html">Admin</a>
   </nav>
 </header>
 
 <main class="container">
   <div class="box">
-    <h2>Danh sách tranh chấp</h2>
+    <h2>Tranh chấp đang chờ xử lý</h2>
     <div id="list">Đang tải…</div>
   </div>
 </main>
@@ -47,11 +49,13 @@ async function loadDisputes() {
   }
 
   if (!r.items || r.items.length === 0) {
-    box.innerHTML = "<p class='muted'>Không có tranh chấp nào</p>";
+    box.innerHTML = "<p class='muted'>Không có tranh chấp nào đang chờ duyệt</p>";
     return;
   }
 
   r.items.forEach(d => {
+    // ⚠️ chỉ render OPEN (double safety)
+    if (d.status && d.status !== "open") return;
     box.innerHTML += renderItem(d);
   });
 }
@@ -59,13 +63,14 @@ async function loadDisputes() {
 function renderItem(d) {
   return `
     <div class="item">
+      <div class="muted">Dispute ID: ${d.id}</div>
       <b>Đơn:</b> ${d.order_id}<br>
       <b>Người mua:</b> ${d.buyer_username}<br>
       <b>Người bán:</b> ${d.seller_username}<br>
       <b>Số tiền:</b> ${formatPrice(d.subtotal_cents)}<br><br>
 
       <b>Nội dung tố cáo:</b>
-      <p>${d.description}</p>
+      <p>${escapeHtml(d.description)}</p>
 
       ${d.evidence_image_key ? `<img src="${d.evidence_image_key}">` : ""}
 
@@ -86,7 +91,7 @@ function renderItem(d) {
 async function decide(id, action) {
   if (!confirm("Xác nhận thao tác?")) return;
 
-  const note = document.getElementById("note-" + id).value;
+  const note = document.getElementById("note-" + id)?.value || "";
   const r = await apiPost(`/api/admin/disputes/${id}/decision`, {
     action,
     admin_note: note
@@ -94,7 +99,7 @@ async function decide(id, action) {
 
   if (!r.ok) {
     if (r.error && (r.error.includes("Already") || r.error.includes("decided"))) {
-      alert("Tranh chấp này đã được xử lý trước đó. Mình sẽ tải lại danh sách.");
+      alert("Tranh chấp này đã được xử lý trước đó.");
       loadDisputes();
       return;
     }
@@ -102,10 +107,17 @@ async function decide(id, action) {
     return;
   }
 
-  alert("Đã xử lý");
+  alert("Đã xử lý tranh chấp");
   loadDisputes();
 }
 
+// chống XSS cơ bản
+function escapeHtml(s) {
+  return String(s || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
 
 loadDisputes();
 </script>
