@@ -427,6 +427,38 @@ if (path === "/api/orders" && req.method === "POST") {
   return withCors(ok({ order_id: orderId }));
 }
 
+// ===== ADMIN LIST DISPUTES =====
+if (path === "/api/admin/disputes" && req.method === "GET") {
+  const admin = await requireAdmin(req, env);
+  if (!admin) return withCors(bad("Unauthorized", 401));
+
+  const rows = await env.DB.prepare(
+    `SELECT
+        d.id,
+        d.order_id,
+        d.description,
+        d.evidence_image_key,
+        d.status,
+        d.created_at,
+
+        o.subtotal_cents,
+
+        ub.username AS buyer_username,
+        us.username AS seller_username
+     FROM disputes d
+     JOIN orders o ON o.id = d.order_id
+     JOIN users ub ON ub.id = d.buyer_id
+     JOIN users us ON us.id = d.seller_id
+     WHERE d.status = 'open'
+     ORDER BY d.created_at DESC`
+  ).all();
+
+  return withCors(ok({
+    items: rows.results || []
+  }));
+}
+
+
 // ===== ADMIN DECIDE DISPUTE (FIXED – D1 SAFE) =====
 if (
   path.startsWith("/api/admin/disputes/") &&
