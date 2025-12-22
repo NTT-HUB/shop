@@ -593,40 +593,97 @@ async function readJson(req) {
 const PBKDF2_ITER = 120000;
 const KEY_LEN = 32;
 
-function b64(bytes) {
-  const arr = new Uint8Array(bytes);
-  let s = "";
-  for (const b of arr) s += String.fromCharCode(b);
-  return btoa(s);
+// ===== PASSWORD HASH (WORKERS SAFE) =====
+const PBKDF2_ITER = 120000;
+const KEY_LEN = 32;
+
+function bufToB64(buf) {
+  return Buffer.from(buf).toString("base64");
 }
-function unb64(s) {
-  const bin = atob(s);
-  const arr = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-  return arr.buffer;
+
+function b64ToBuf(b64) {
+  return Uint8Array.from(Buffer.from(b64, "base64")).buffer;
 }
-async function pbkdf2(password, salt, iterations) {
-  const enc = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveBits"]);
-  return crypto.subtle.deriveBits({ name: "PBKDF2", salt, iterations, hash: "SHA-256" }, keyMaterial, KEY_LEN * 8);
-}
+
 async function hashPassword(password, pepper) {
+  if (!pepper || typeof pepper !== "string") {
+    throw new Error("PEPPER_INVALID");
+  }
+
+  const enc = new TextEncoder();
   const salt = crypto.getRandomValues(new Uint8Array(16));
-  const derived = await pbkdf2(password + pepper, salt, PBKDF2_ITER);
-  return `pbkdf2$${PBKDF2_ITER}$${b64(salt.buffer)}$${b64(derived)}`;
+
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(password + pepper),
+    "PBKDF2",
+    false,
+    ["deriveBits"]
+  );
+
+  const derivedBits = await crypto.subtle.deriveBits(
+    {
+      name: "PBKDF2",
+      salt,
+      iterations: PBKDF2_ITER,
+      hash: "SHA-256"
+    },
+    keyMaterial,
+    KEY_LEN * 8
+  );
+
+  return [
+    "pbkdf2",
+    PBKDF2_ITER,
+    bufToB64(salt),
+    bufToB64(derivedBits)
+  ].join("$");
 }
+
 async function verifyPassword(password, stored, pepper) {
-  const parts = stored.split("$");
-  if (parts.length !== 4 || parts[0] !== "pbkdf2") return false;
-  const iter = parseInt(parts[1], 10);
-  const salt = new Uint8Array(unb64(parts[2]));
-  const expected = new Uint8Array(unb64(parts[3]));
-  const derived = new Uint8Array(await pbkdf2(password + pepper, salt, iter));
-  if (derived.length !== expected.length) return false;
-  let diff = 0;
-  for (let i = 0; i < derived.length; i++) diff |= derived[i] ^ expected[i];
-  return diff === 0;
+  try {
+    const [tag, iterStr, saltB64, hashB64] = stored.split("$");
+    if (tag !== "pbkdf2") return false;
+
+    const iterations = parseInt(iterStr, 10);
+    const salt = new Uint8Array(b64ToBuf(saltB64));
+    const expected = new Uint8Array(b64ToBuf(hashB64));
+
+    const enc = new TextEncoder();
+    const keyMaterial = await crypto.subtle.importKey(
+      "raw",
+      enc.encode(password + pepper),
+      "PBKDF2",
+      false,
+      ["deriveBits"]
+    );
+
+    const derivedBits = await crypto.subtle.deriveBits(
+      {
+        name: "PBKDF2",
+        salt,
+        iterations,
+        hash: "SHA-256"
+      },
+      keyMaterial,
+      KEY_LEN * 8
+    );
+
+    const derived = new Uint8Array(derivedBits);
+
+    if (derived.length !== expected.length) return false;
+
+    let diff = 0;
+    for (let i = 0; i < derived.length; i++) {
+      diff |= derived[i] ^ expected[i];
+    }
+    return diff === 0;
+  } catch (e) {
+    console.error("VERIFY PASSWORD ERROR:", e);
+    return false;
+  }
 }
+
 
 // ===== auth =====
 async function getUserFromSession(req, env) {
