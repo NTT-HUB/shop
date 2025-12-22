@@ -427,7 +427,7 @@ if (path === "/api/orders" && req.method === "POST") {
   return withCors(ok({ order_id: orderId }));
 }
 
-// ===== ADMIN DECIDE DISPUTE =====
+// ===== ADMIN DECIDE DISPUTE (FIXED – D1 SAFE) =====
 if (
   path.startsWith("/api/admin/disputes/") &&
   path.endsWith("/decision") &&
@@ -437,16 +437,22 @@ if (
   if (!admin) return withCors(bad("Unauthorized", 401));
 
   const parts = path.split("/");
-  const disputeId = parts[4]; // <-- QUAN TRỌNG
+  const disputeId = parts[4]; // /api/admin/disputes/{id}/decision
+
   const body = await readJson(req);
-  if (!body || !body.action) return withCors(bad("Missing action"));
+  if (!body || !body.action)
+    return withCors(bad("Missing action"));
+
+  if (body.action !== "approve" && body.action !== "reject")
+    return withCors(bad("Invalid action"));
 
   const dispute = await env.DB.prepare(
     "SELECT * FROM disputes WHERE id=?"
   ).bind(disputeId).first();
 
   if (!dispute) return withCors(bad("Not found", 404));
-  if (dispute.status !== "open") return withCors(bad("Already decided", 409));
+  if (dispute.status !== "open")
+    return withCors(bad("Already decided", 409));
 
   const order = await env.DB.prepare(
     "SELECT * FROM orders WHERE id=?"
@@ -459,75 +465,102 @@ if (
   // ===== REJECT =====
   if (body.action === "reject") {
     await env.DB.prepare(
-      "UPDATE disputes SET status='rejected', admin_id=?, admin_note=?, updated_at=? WHERE id=?"
-    ).bind(admin.userId, body.admin_note || null, now, disputeId).run();
+      `UPDATE disputes
+       SET status='rejected',
+           admin_id=?,
+           admin_note=?,
+           updated_at=?
+       WHERE id=?`
+    ).bind(
+      admin.userId,
+      body.admin_note || null,
+      now,
+      disputeId
+    ).run();
 
     return withCors(ok({ status: "rejected" }));
   }
 
   // ===== APPROVE (SCAM) =====
-  if (body.action === "approve") {
-    try {
-      // 1️⃣ hoàn tiền buyer
-      await env.DB.prepare(
-        "UPDATE wallets SET balance_cents = balance_cents + ?, updated_at=? WHERE user_id=?"
-      ).bind(order.subtotal_cents, now, order.buyer_id).run();
+  try {
+    // 1️⃣ Hoàn tiền buyer
+    await env.DB.prepare(
+      "UPDATE wallets SET balance_cents = balance_cents + ?, updated_at=? WHERE user_id=?"
+    ).bind(
+      order.subtotal_cents,
+      now,
+      order.buyer_id
+    ).run();
 
-      await env.DB.prepare(
-        `INSERT INTO wallet_ledger
-         (id, user_id, type, amount_cents, ref_type, ref_id, note, created_at)
-         VALUES (?, ?, 'refund', ?, 'dispute', ?, ?, ?)`
-      ).bind(
-        crypto.randomUUID(),
-        order.buyer_id,
-        order.subtotal_cents,
-        disputeId,
-        `Hoàn tiền đơn ${order.id}`,
-        now
-      ).run();
+    await env.DB.prepare(
+      `INSERT INTO wallet_ledger
+       (id, user_id, type, amount_cents, ref_type, ref_id, note, created_at)
+       VALUES (?, ?, 'refund', ?, 'dispute', ?, ?, ?)`
+    ).bind(
+      crypto.randomUUID(),
+      order.buyer_id,
+      order.subtotal_cents,
+      disputeId,
+      `Hoàn tiền đơn ${order.id}`,
+      now
+    ).run();
 
-      // 2️⃣ trừ tiền seller
-      await env.DB.prepare(
-        "UPDATE wallets SET balance_cents = balance_cents - ?, updated_at=? WHERE user_id=?"
-      ).bind(order.seller_income_cents, now, order.seller_id).run();
+    // 2️⃣ Trừ tiền seller
+    await env.DB.prepare(
+      "UPDATE wallets SET balance_cents = balance_cents - ?, updated_at=? WHERE user_id=?"
+    ).bind(
+      order.seller_income_cents,
+      now,
+      order.seller_id
+    ).run();
 
-      await env.DB.prepare(
-        `INSERT INTO wallet_ledger
-         (id, user_id, type, amount_cents, ref_type, ref_id, note, created_at)
-         VALUES (?, ?, 'adjustment', ?, 'dispute', ?, ?, ?)`
-      ).bind(
-        crypto.randomUUID(),
-        order.seller_id,
-        -order.seller_income_cents,
-        disputeId,
-        `Thu hồi tiền do scam`,
-        now
-      ).run();
+    await env.DB.prepare(
+      `INSERT INTO wallet_ledger
+       (id, user_id, type, amount_cents, ref_type, ref_id, note, created_at)
+       VALUES (?, ?, 'adjustment', ?, 'dispute', ?, ?, ?)`
+    ).bind(
+      crypto.randomUUID(),
+      order.seller_id,
+      -order.seller_income_cents,
+      disputeId,
+      "Thu hồi tiền do scam",
+      now
+    ).run();
 
-      // 3️⃣ khóa seller
-      await env.DB.prepare(
-        "UPDATE users SET status='banned', updated_at=? WHERE id=?"
-      ).bind(now, order.seller_id).run();
+    // 3️⃣ Ban seller
+    await env.DB.prepare(
+      "UPDATE users SET status='banned', updated_at=? WHERE id=?"
+    ).bind(
+      now,
+      order.seller_id
+    ).run();
 
-      // 4️⃣ update order
-      await env.DB.prepare(
-        "UPDATE orders SET status='refunded' WHERE id=?"
-      ).bind(order.id).run();
+    // 4️⃣ Update order
+    await env.DB.prepare(
+      "UPDATE orders SET status='refunded' WHERE id=?"
+    ).bind(order.id).run();
 
-      // 5️⃣ update dispute
-      await env.DB.prepare(
-        "UPDATE disputes SET status='approved', admin_id=?, admin_note=?, updated_at=? WHERE id=?"
-      ).bind(admin.userId, body.admin_note || null, now, disputeId).run();
+    // 5️⃣ Update dispute
+    await env.DB.prepare(
+      `UPDATE disputes
+       SET status='approved',
+           admin_id=?,
+           admin_note=?,
+           updated_at=?
+       WHERE id=?`
+    ).bind(
+      admin.userId,
+      body.admin_note || null,
+      now,
+      disputeId
+    ).run();
 
-      return withCors(ok({ status: "approved" }));
-    } catch (e) {
-      return withCors(bad("Approve scam failed", 500));
-    }
+    return withCors(ok({ status: "approved" }));
+  } catch (e) {
+    console.error("ADMIN APPROVE ERROR:", e);
+    return withCors(bad("Approve scam failed", 500));
   }
-
-  return withCors(bad("Invalid action"));
 }
-
 
 
 
