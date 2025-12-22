@@ -618,6 +618,23 @@ if (path.startsWith("/api/admin/withdrawals/") && path.endsWith("/decision") && 
 }
 
 
+// ===== ADMIN LIST WITHDRAWALS =====
+if (path === "/api/admin/withdrawals" && req.method === "GET") {
+  const admin = await requireAdmin(req, env);
+  if (!admin) return withCors(bad("Unauthorized", 401));
+
+  const rows = await env.DB.prepare(
+    `SELECT w.*, u.username
+     FROM withdrawals w
+     JOIN users u ON u.id=w.user_id
+     WHERE w.status='pending'
+     ORDER BY w.created_at DESC`
+  ).all();
+
+  return withCors(ok({ items: rows.results || [] }));
+}
+
+
 // ===== WITHDRAW (MANUAL) =====
 if (path === "/api/withdraw" && req.method === "POST") {
   const u = await requireAuth(req, env);
