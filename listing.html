@@ -1,15 +1,33 @@
 <!DOCTYPE html>
-<html>
+<html lang="vi">
 <head>
   <meta charset="utf-8">
   <title>Chi tiết sản phẩm</title>
   <link rel="stylesheet" href="assets/style.css">
+  <style>
+    .meta {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+      margin: 15px 0;
+    }
+    .buy-box {
+      margin-top: 20px;
+      border-top: 2px dashed #fff;
+      padding-top: 15px;
+    }
+    .sold {
+      color: #f87171;
+      font-weight: bold;
+    }
+  </style>
 </head>
 <body>
+
 <header>
   <div class="brand">
     <a href="/">SHOP</a>
-    <small>Chi tiết</small>
+    <small>Chi tiết sản phẩm</small>
   </div>
   <nav>
     <a href="/dashboard.html">Tài khoản</a>
@@ -22,15 +40,18 @@
     <p id="desc" class="muted"></p>
 
     <div class="meta">
-      <div><b>Giá:</b> <span id="price"></span></div>
-      <div><b>Tồn kho:</b> <span id="qty"></span></div>
+      <div><b>Giá trọn gói:</b> <span id="price"></span></div>
+      <div><b>Tình trạng:</b> <span id="status"></span></div>
       <div><b>Người bán:</b> <span id="seller"></span></div>
       <div><b>Uy tín:</b> <span id="rep"></span></div>
     </div>
 
-    <div class="buy">
-      <input id="buyQty" type="number" min="1" value="1">
-      <button onclick="buy()">Mua ngay</button>
+    <div id="buyBox" class="buy-box">
+      <button class="btn primary block" onclick="confirmBuy()">Mua ngay</button>
+      <p class="muted">
+        • Mỗi sản phẩm chỉ bán <b>1 lần</b><br>
+        • Sau khi thanh toán, đơn hàng không thể hoàn tác
+      </p>
     </div>
 
     <p id="msg" class="muted"></p>
@@ -51,19 +72,42 @@ async function load() {
   }
 
   listing = r.item;
+
   title.innerText = listing.title;
   desc.innerText = listing.description || "Không có mô tả";
   price.innerText = formatPrice(listing.price_cents);
-  qty.innerText = listing.quantity;
   seller.innerText = listing.seller_username;
   rep.innerText = listing.seller_reputation || 0;
+
+  if (listing.quantity > 0) {
+    status.innerHTML = `<span class="muted">Còn hàng</span>`;
+  } else {
+    status.innerHTML = `<span class="sold">Đã bán</span>`;
+    buyBox.innerHTML = `<p class="sold">Sản phẩm này đã được bán.</p>`;
+  }
+}
+
+async function confirmBuy() {
+  if (!listing || listing.quantity <= 0) return;
+
+  const ok = confirm(
+    "Bạn có chắc muốn mua sản phẩm này?\n\n" +
+    "✔ Giá trọn gói: " + formatPrice(listing.price_cents) + "\n" +
+    "✔ Mỗi sản phẩm chỉ bán 1 lần\n" +
+    "⚠ Sau khi thanh toán, giao dịch không thể hoàn tác."
+  );
+
+  if (!ok) return;
+
+  buy();
 }
 
 async function buy() {
-  msg.innerText = "Đang xử lý...";
+  msg.innerText = "Đang tạo đơn hàng...";
+
   const res = await apiPost("/api/orders", {
     listing_id: id,
-    quantity: Number(buyQty.value || 1)
+    quantity: 1
   });
 
   if (!res.ok) {
@@ -71,11 +115,11 @@ async function buy() {
     return;
   }
 
-  // 👉 QUAN TRỌNG: redirect sang order.html
   location.href = "/order.html?id=" + res.order_id;
 }
 
 load();
 </script>
+
 </body>
 </html>
