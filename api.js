@@ -437,7 +437,7 @@ if (
   if (!admin) return withCors(bad("Unauthorized", 401));
 
   const parts = path.split("/");
-  const disputeId = parts[3]; // <-- QUAN TRỌNG
+  const disputeId = parts[4]; // <-- QUAN TRỌNG
   const body = await readJson(req);
   if (!body || !body.action) return withCors(bad("Missing action"));
 
