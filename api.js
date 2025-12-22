@@ -1110,6 +1110,112 @@ if (path === "/api/withdraw" && req.method === "POST") {
   }));
 }
 
+// ===== SUBMIT CARD (THESIEURE) =====
+if (path === "/api/card/submit" && req.method === "POST") {
+  const u = await requireAuth(req, env);
+  if (!u) return withCors(bad("Unauthorized", 401));
+
+  const body = await readJson(req);
+  if (!body || !body.card)
+    return withCors(bad("Missing card info"));
+
+  const { type, amount, code, serial } = body.card;
+  if (!type || !amount || !code || !serial)
+    return withCors(bad("Invalid card data"));
+
+  // load settings
+  const rows = await env.DB.prepare("SELECT key,value FROM system_settings").all();
+  const s = {};
+  for (const r of rows.results || []) s[r.key] = r.value;
+
+  if (s.card_provider !== "thesieure")
+    return withCors(bad("Card provider not enabled"));
+
+  const gross = Number(amount);
+  if (!Number.isFinite(gross) || gross <= 0)
+    return withCors(bad("Invalid amount"));
+
+  const feePercent = Number(s.card_fee_percent || "0");
+  const fee = Math.round(gross * (feePercent / 100));
+  const net = Math.max(0, gross - fee);
+
+  const depositId = crypto.randomUUID();
+  const now = Date.now();
+
+  // 1️⃣ tạo deposit pending
+  await env.DB.prepare(
+    `INSERT INTO deposits
+     (id, user_id, provider, gross_cents, fee_cents, net_cents, status, created_at, updated_at)
+     VALUES (?, ?, 'thesieure', ?, ?, ?, 'pending', ?, ?)`
+  ).bind(
+    depositId,
+    u.userId,
+    gross * 100,
+    fee * 100,
+    net * 100,
+    now,
+    now
+  ).run();
+
+  // 2️⃣ gọi API Thesieure
+  const payload = {
+    partner_id: s.card_partner_id,
+    api_key: s.card_api_key,
+    telco: type,
+    amount: gross,
+    code,
+    serial,
+    request_id: depositId,
+    callback_url: `https://${s.card_callback_domain}/api/webhooks/thesieure`
+  };
+
+  const resp = await fetch("https://thesieure.com/chargingws/v2", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+
+  const data = await resp.json();
+
+  // Thesieure nhận hay không
+  if (!data || data.status !== 1) {
+    await env.DB.prepare(
+      "UPDATE deposits SET status='failed', raw_payload=?, updated_at=? WHERE id=?"
+    ).bind(JSON.stringify(data), Date.now(), depositId).run();
+
+    return withCors(bad(data?.message || "Card rejected"));
+  }
+
+  return withCors(ok({
+    deposit_id: depositId,
+    message: "Thẻ đã gửi, đang chờ xử lý"
+  }));
+}
+
+async function depositCard() {
+  if (!card_type.value || !card_amount.value || !card_code.value || !card_serial.value)
+    return alert("Nhập đầy đủ thông tin thẻ");
+
+  const r = await apiPost("/api/card/submit", {
+    card: {
+      type: card_type.value,
+      amount: Number(card_amount.value),
+      code: card_code.value,
+      serial: card_serial.value
+    }
+  });
+
+  if (!r.ok) return alert(r.error || "Nạp thẻ thất bại");
+
+  card_out.innerHTML = `
+    <div class="note">
+      <b>Đã gửi thẻ thành công</b><br>
+      <p class="muted">Thẻ đang được xử lý, tiền sẽ vào ví sau vài giây.</p>
+    </div>
+  `;
+}
+
+
 
       // -------- DISPUTES --------
       if (path === "/api/disputes" && req.method === "POST") {
