@@ -594,6 +594,197 @@ if (
   }
 }
 
+// ===== ADMIN GET SETTINGS =====
+if (path === "/api/admin/settings" && req.method === "GET") {
+  const admin = await requireAdmin(req, env);
+  if (!admin) return withCors(bad("Unauthorized", 401));
+
+  const rows = await env.DB.prepare(
+    "SELECT key, value FROM system_settings"
+  ).all();
+
+  const map = {};
+  for (const r of (rows.results || [])) map[r.key] = r.value;
+
+  return withCors(ok({
+    settings: {
+      // phí
+      bank_fee_percent: Number(map.bank_fee_percent || "5"),
+      card_fee_percent: Number(map.card_fee_percent || "5"),
+
+      // bank (web2m)
+      web2m_token: map.web2m_token || "",
+      web2m_bank_account: map.web2m_bank_account || "",
+      web2m_prefix: map.web2m_prefix || "NAP",
+
+      // card (thesieure)
+      card_provider: map.card_provider || "thesieure",
+      card_api_key: map.card_api_key || "",
+      card_partner_id: map.card_partner_id || "",
+      card_callback_domain: map.card_callback_domain || ""
+    }
+  }));
+}
+
+// ===== ADMIN UPDATE SETTINGS =====
+if (path === "/api/admin/settings" && req.method === "POST") {
+  const admin = await requireAdmin(req, env);
+  if (!admin) return withCors(bad("Unauthorized", 401));
+
+  const body = await readJson(req);
+  if (!body) return withCors(bad("Invalid JSON"));
+
+  // chỉ cho update whitelist key
+  const allow = new Set([
+    "bank_fee_percent","card_fee_percent",
+    "web2m_token","web2m_bank_account","web2m_prefix",
+    "card_provider","card_api_key","card_partner_id","card_callback_domain"
+  ]);
+
+  const now = Date.now();
+  const entries = Object.entries(body || {}).filter(([k]) => allow.has(k));
+
+  for (const [k, v] of entries) {
+    await env.DB.prepare(
+      "INSERT INTO system_settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value"
+    ).bind(k, String(v ?? "")).run();
+  }
+
+  return withCors(ok({ updated: entries.map(([k]) => k), ts: now }));
+}
+
+// ===== CREATE DEPOSIT =====
+if (path === "/api/deposits/create" && req.method === "POST") {
+  const u = await requireAuth(req, env);
+  if (!u) return withCors(bad("Unauthorized", 401));
+
+  const body = await readJson(req);
+  if (!body) return withCors(bad("Invalid JSON"));
+
+  const method = String(body.method || "");
+  const gross = Number(body.amount_cents || 0);
+  if (!["bank","card"].includes(method)) return withCors(bad("Invalid method"));
+  if (!Number.isFinite(gross) || gross <= 0) return withCors(bad("Invalid amount"));
+
+  // load settings
+  const sRows = await env.DB.prepare("SELECT key,value FROM system_settings").all();
+  const s = {};
+  for (const r of (sRows.results || [])) s[r.key] = r.value;
+
+  const bankFeePercent = Number(s.bank_fee_percent || "5");
+  const cardFeePercent = Number(s.card_fee_percent || "5");
+
+  const feePercent = method === "bank" ? bankFeePercent : cardFeePercent;
+  const fee = Math.round(gross * (feePercent / 100));
+  const net = Math.max(0, gross - fee);
+
+  const id = crypto.randomUUID();
+  const now = Date.now();
+  const provider = method === "bank" ? "bank_web2m" : (s.card_provider || "thesieure");
+
+  await env.DB.prepare(
+    `INSERT INTO deposits
+     (id, user_id, provider, gross_cents, fee_cents, net_cents, status, provider_txn_id, raw_payload, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, 'pending', NULL, NULL, ?, ?)`
+  ).bind(id, u.userId, provider, gross, fee, net, now, now).run();
+
+  // code để người dùng ghi vào nội dung chuyển khoản
+  const prefix = String(s.web2m_prefix || "NAP");
+  const payCode = `${prefix}${id.slice(0, 8)}`; // ví dụ NAPa1b2c3d4
+
+  return withCors(ok({
+    deposit_id: id,
+    method,
+    gross_cents: gross,
+    fee_cents: fee,
+    net_cents: net,
+    pay_code: payCode,
+    message:
+      method === "bank"
+        ? `Chuyển khoản đúng nội dung: ${payCode}`
+        : `Nạp thẻ: hệ thống sẽ tự xử lý, mã: ${payCode}`
+  }));
+}
+
+// ===== ADMIN MARK DEPOSIT PAID (manual/bridge) =====
+if (path.startsWith("/api/admin/deposits/") && path.endsWith("/mark-paid") && req.method === "POST") {
+  const admin = await requireAdmin(req, env);
+  if (!admin) return withCors(bad("Unauthorized", 401));
+
+  const parts = path.split("/");
+  const depId = parts[4]; // /api/admin/deposits/{id}/mark-paid
+
+  const dep = await env.DB.prepare("SELECT * FROM deposits WHERE id=?").bind(depId).first();
+  if (!dep) return withCors(bad("Not found", 404));
+  if (dep.status !== "pending") return withCors(bad("Already processed", 409));
+
+  const now = Date.now();
+
+  // cộng ví user
+  await env.DB.prepare("UPDATE wallets SET balance_cents = balance_cents + ?, updated_at=? WHERE user_id=?")
+    .bind(dep.net_cents, now, dep.user_id).run();
+
+  // ledger
+  await env.DB.prepare(
+    `INSERT INTO wallet_ledger (id, user_id, type, amount_cents, ref_type, ref_id, note, created_at)
+     VALUES (?, ?, 'deposit', ?, 'deposit', ?, ?, ?)`
+  ).bind(crypto.randomUUID(), dep.user_id, dep.net_cents, dep.id, "Nạp tiền", now).run();
+
+  // update tổng nạp để tính quota
+  await env.DB.prepare("UPDATE users SET total_deposit_cents = total_deposit_cents + ?, updated_at=? WHERE id=?")
+    .bind(dep.net_cents, now, dep.user_id).run();
+
+  await env.DB.prepare("UPDATE deposits SET status='paid', updated_at=? WHERE id=?")
+    .bind(now, dep.id).run();
+
+  return withCors(ok({ status: "paid" }));
+}
+
+// ===== CARD WEBHOOK (generic) =====
+if (path === "/api/webhooks/card" && req.method === "POST") {
+  const body = await readJson(req);
+  if (!body) return withCors(bad("Invalid JSON"));
+
+  // bạn map theo provider:
+  // - deposit_id (hoặc request_id)
+  // - status: success/failed
+  // - provider_txn_id
+  // - gross_cents (nếu provider trả)
+  const deposit_id = String(body.deposit_id || body.request_id || "");
+  const status = String(body.status || "");
+  const provider_txn_id = String(body.provider_txn_id || body.trans_id || "");
+
+  if (!deposit_id) return withCors(bad("Missing deposit_id"));
+
+  const dep = await env.DB.prepare("SELECT * FROM deposits WHERE id=?").bind(deposit_id).first();
+  if (!dep) return withCors(bad("Not found", 404));
+  if (dep.status !== "pending") return withCors(ok({ status: dep.status })); // idempotent
+
+  if (status !== "success") {
+    await env.DB.prepare("UPDATE deposits SET status='failed', provider_txn_id=?, raw_payload=?, updated_at=? WHERE id=?")
+      .bind(provider_txn_id || null, JSON.stringify(body), Date.now(), dep.id).run();
+    return withCors(ok({ status: "failed" }));
+  }
+
+  const now = Date.now();
+
+  // cộng ví
+  await env.DB.prepare("UPDATE wallets SET balance_cents = balance_cents + ?, updated_at=? WHERE user_id=?")
+    .bind(dep.net_cents, now, dep.user_id).run();
+
+  await env.DB.prepare(
+    `INSERT INTO wallet_ledger (id, user_id, type, amount_cents, ref_type, ref_id, note, created_at)
+     VALUES (?, ?, 'deposit', ?, 'deposit', ?, ?, ?)`
+  ).bind(crypto.randomUUID(), dep.user_id, dep.net_cents, dep.id, "Nạp thẻ", now).run();
+
+  await env.DB.prepare("UPDATE users SET total_deposit_cents = total_deposit_cents + ?, updated_at=? WHERE id=?")
+    .bind(dep.net_cents, now, dep.user_id).run();
+
+  await env.DB.prepare("UPDATE deposits SET status='paid', provider_txn_id=?, raw_payload=?, updated_at=? WHERE id=?")
+    .bind(provider_txn_id || null, JSON.stringify(body), now, dep.id).run();
+
+  return withCors(ok({ status: "paid" }));
+}
 
 
       // GET /api/orders/:id
