@@ -87,13 +87,17 @@ async function decide(id, action) {
   if (!confirm("Xác nhận thao tác?")) return;
 
   const note = document.getElementById("note-" + id).value;
-
   const r = await apiPost(`/api/admin/disputes/${id}/decision`, {
     action,
     admin_note: note
   });
 
   if (!r.ok) {
+    if (r.error && (r.error.includes("Already") || r.error.includes("decided"))) {
+      alert("Tranh chấp này đã được xử lý trước đó. Mình sẽ tải lại danh sách.");
+      loadDisputes();
+      return;
+    }
     alert(r.error || "Thao tác thất bại");
     return;
   }
@@ -101,6 +105,7 @@ async function decide(id, action) {
   alert("Đã xử lý");
   loadDisputes();
 }
+
 
 loadDisputes();
 </script>
