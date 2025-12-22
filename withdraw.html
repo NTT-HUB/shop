@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>Rút tiền</title>
+  <link rel="stylesheet" href="assets/style.css">
+  <style>
+    .group { margin-bottom: 10px; }
+    .hide { display:none; }
+    input { width:100%; padding:6px; }
+    .btn { border:2px solid #000; padding:8px; cursor:pointer; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <a href="/">SHOP</a>
+    <small>Rút tiền</small>
+  </div>
+  <nav>
+    <a href="/dashboard.html">Tài khoản</a>
+  </nav>
+</header>
+
+<main class="container">
+  <div class="box">
+    <h2>Rút tiền</h2>
+
+    <div class="group">
+      <label>Số tiền (VNĐ)</label>
+      <input id="amount" type="number" placeholder="Ví dụ: 100000">
+    </div>
+
+    <div class="group">
+      <label>Phương thức</label>
+      <select id="method" onchange="switchMethod()">
+        <option value="bank">Ngân hàng</option>
+        <option value="thesieure">Thẻ Siêu Rẻ</option>
+      </select>
+    </div>
+
+    <!-- BANK -->
+    <div id="bankBox">
+      <div class="group">
+        <input id="bankName" placeholder="Tên ngân hàng">
+      </div>
+      <div class="group">
+        <input id="bankOwner" placeholder="Tên chủ tài khoản">
+      </div>
+      <div class="group">
+        <input id="bankNumber" placeholder="Số tài khoản">
+      </div>
+    </div>
+
+    <!-- THESIEURE -->
+    <div id="cardBox" class="hide">
+      <div class="group">
+        <input id="cardUser" placeholder="Tên tài khoản Thẻ Siêu Rẻ">
+      </div>
+      <div class="group">
+        <input id="cardContact" placeholder="SĐT hoặc Gmail">
+      </div>
+    </div>
+
+    <button class="btn" onclick="withdraw()">Rút tiền</button>
+    <p id="msg" class="muted"></p>
+  </div>
+</main>
+
+<script src="assets/app.js"></script>
+<script>
+function switchMethod() {
+  const m = method.value;
+  bankBox.classList.toggle("hide", m !== "bank");
+  cardBox.classList.toggle("hide", m !== "thesieure");
+}
+
+async function withdraw() {
+  msg.innerText = "Đang xử lý...";
+  const amountCents = Number(amount.value);
+
+  if (!amountCents || amountCents <= 0) {
+    msg.innerText = "Số tiền không hợp lệ";
+    return;
+  }
+
+  let body = {
+    method: method.value,
+    amount_cents: amountCents
+  };
+
+  if (method.value === "bank") {
+    body.bank = {
+      name: bankName.value,
+      owner: bankOwner.value,
+      number: bankNumber.value
+    };
+  } else {
+    body.card = {
+      username: cardUser.value,
+      contact: cardContact.value
+    };
+  }
+
+  const r = await apiPost("/api/withdraw", body);
+
+  if (!r.ok) {
+    msg.innerText = r.error || "Rút tiền thất bại";
+    return;
+  }
+
+  msg.innerText = r.message;
+}
+
+switchMethod();
+</script>
+
+</body>
+</html>
