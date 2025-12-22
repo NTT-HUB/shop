@@ -606,25 +606,38 @@ if (path === "/api/admin/settings" && req.method === "GET") {
   const map = {};
   for (const r of (rows.results || [])) map[r.key] = r.value;
 
-  return withCors(ok({
+  const res = ok({
     settings: {
       // phí
       bank_fee_percent: Number(map.bank_fee_percent || "5"),
       card_fee_percent: Number(map.card_fee_percent || "5"),
 
-      // bank (web2m)
+      // bank NEW (theo admin page mới)
+      bank_name: map.bank_name || "",
+      bank_account_name: map.bank_account_name || "",
+      bank_account_number: map.bank_account_number || "",
+      bank_transfer_prefix: map.bank_transfer_prefix || "NAP",
+
+      // bank OLD (giữ tương thích nếu chỗ khác còn dùng)
       web2m_token: map.web2m_token || "",
       web2m_bank_account: map.web2m_bank_account || "",
       web2m_prefix: map.web2m_prefix || "NAP",
 
-      // card (thesieure)
+      // card
       card_provider: map.card_provider || "thesieure",
       card_api_key: map.card_api_key || "",
       card_partner_id: map.card_partner_id || "",
       card_callback_domain: map.card_callback_domain || ""
     }
-  }));
+  });
+
+  // chống cache mạnh
+  res.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+  res.headers.set("Pragma", "no-cache");
+
+  return withCors(res);
 }
+
 
 // ===== ADMIN UPDATE SETTINGS =====
 if (path === "/api/admin/settings" && req.method === "POST") {
@@ -636,10 +649,17 @@ if (path === "/api/admin/settings" && req.method === "POST") {
 
   // chỉ cho update whitelist key
   const allow = new Set([
-    "bank_fee_percent","card_fee_percent",
-    "web2m_token","web2m_bank_account","web2m_prefix",
-    "card_provider","card_api_key","card_partner_id","card_callback_domain"
-  ]);
+  "bank_fee_percent","card_fee_percent",
+
+  // bank NEW
+  "bank_name","bank_account_name","bank_account_number","bank_transfer_prefix",
+
+  // bank OLD
+  "web2m_token","web2m_bank_account","web2m_prefix",
+
+  // card
+  "card_provider","card_api_key","card_partner_id","card_callback_domain"
+]);
 
   const now = Date.now();
   const entries = Object.entries(body || {}).filter(([k]) => allow.has(k));
