@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>Admin Dashboard</title>
+  <link rel="stylesheet" href="assets/style.css">
+  <style>
+    .grid {
+      display:grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap:12px;
+      margin-top:15px;
+    }
+    .card {
+      border:2px solid #000;
+      padding:12px;
+    }
+    .big {
+      font-size:24px;
+      font-weight:bold;
+    }
+    .links a {
+      display:block;
+      margin-top:8px;
+      border:2px solid #000;
+      padding:6px;
+      text-align:center;
+      text-decoration:none;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <a href="/">SHOP</a>
+    <small>Admin Dashboard</small>
+  </div>
+  <nav>
+    <a href="/dashboard.html">User</a>
+    <a href="/admin-dashboard.html"><b>Admin</b></a>
+  </nav>
+</header>
+
+<main class="container">
+  <div class="box">
+    <h2>Tổng quan hệ thống</h2>
+
+    <div class="grid">
+      <div class="card">
+        <div>User</div>
+        <div class="big" id="users">0</div>
+        <small>Hoạt động: <span id="usersActive">0</span></small>
+      </div>
+
+      <div class="card">
+        <div>Sản phẩm đang bán</div>
+        <div class="big" id="listings">0</div>
+      </div>
+
+      <div class="card">
+        <div>Tổng số dư ví</div>
+        <div class="big" id="wallets">0 đ</div>
+      </div>
+
+      <div class="card">
+        <div>Tranh chấp</div>
+        <div class="big" id="disputes">0</div>
+      </div>
+
+      <div class="card">
+        <div>Rút tiền chờ duyệt</div>
+        <div class="big" id="withdrawals">0</div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:20px">Quản lý nhanh</h3>
+    <div class="links">
+      <a href="/admin-disputes.html">🛠 Duyệt Scam</a>
+      <a href="/admin-withdrawals.html">💰 Duyệt Rút tiền</a>
+      <a href="/ledger.html">📜 Giao dịch</a>
+      <a href="/orders.html">📦 Đơn hàng</a>
+    </div>
+  </div>
+</main>
+
+<script src="assets/app.js"></script>
+<script>
+async function load() {
+  const r = await apiGet("/api/admin/dashboard");
+  if (!r.ok) {
+    alert("Không có quyền admin");
+    location.href = "/";
+    return;
+  }
+
+  users.innerText = r.users.total;
+  usersActive.innerText = r.users.active;
+  listings.innerText = r.listings;
+  wallets.innerText = formatPrice(r.wallet_total_cents);
+  disputes.innerText = r.disputes;
+  withdrawals.innerText = r.withdrawals;
+}
+
+load();
+</script>
+
+</body>
+</html>
