@@ -442,6 +442,42 @@ if (path === "/api/admin/users/status" && req.method === "POST") {
   return withCors(ok({ user_id, status }));
 }
 
+// DELETE /api/listings/:id
+if (path.startsWith("/api/listings/") && req.method === "DELETE") {
+  const u = await requireAuth(req, env);
+  if (!u) return withCors(bad("Unauthorized", 401));
+
+  const id = path.split("/").pop();
+
+  const listing = await env.DB.prepare(
+    "SELECT id, seller_id FROM listings WHERE id=?"
+  ).bind(id).first();
+
+  if (!listing) return withCors(bad("Not found", 404));
+  if (listing.seller_id !== u.userId)
+    return withCors(bad("Forbidden", 403));
+
+  // 🔒 Kiểm tra CHƯA CÓ ĐƠN
+  const hasOrder = await env.DB.prepare(
+    "SELECT 1 FROM orders WHERE listing_id=? LIMIT 1"
+  ).bind(id).first();
+
+  if (hasOrder) {
+    return withCors(bad(
+      "Sản phẩm đã có đơn, không thể xóa",
+      400
+    ));
+  }
+
+  // ✅ XÓA CỨNG
+  await env.DB.prepare(
+    "DELETE FROM listings WHERE id=?"
+  ).bind(id).run();
+
+  return withCors(ok({ message: "Đã xóa sản phẩm" }));
+}
+
+
       // -------- PURCHASE --------
 // POST /api/orders (BUY ALL)
 if (path === "/api/orders" && req.method === "POST") {
