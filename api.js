@@ -303,19 +303,115 @@ if (path === "/api/my/orders" && req.method === "GET") {
         return withCors(ok({ listing_id: id }));
       }
 
-      if (path.startsWith("/api/listings/") && req.method === "GET") {
-        const id = path.split("/").pop();
-        const row = await env.DB.prepare(
-          `SELECT l.*, u.username as seller_username, u.reputation as seller_reputation
-           FROM listings l JOIN users u ON u.id=l.seller_id
-           WHERE l.id=?`
-        )
-          .bind(id)
-          .first();
+     if (path.startsWith("/api/listings/") && req.method === "GET") {
+  const id = path.split("/").pop();
 
-        if (!row) return withCors(bad("Not found", 404));
-        return withCors(ok({ item: row }));
-      }
+  const row = await env.DB.prepare(
+    `SELECT
+        l.*,
+        u.username AS seller_username,
+        u.reputation AS seller_reputation,
+        u.status AS seller_status
+     FROM listings l
+     JOIN users u ON u.id = l.seller_id
+     WHERE l.id = ?`
+  ).bind(id).first();
+
+  if (!row)
+    return withCors(bad("Not found", 404));
+
+  // 🔒 SELLER BỊ BAN → KHÔNG CHO XEM
+  if (row.seller_status !== "active") {
+    return withCors(bad("Seller is banned", 403));
+  }
+
+  // 🔒 LISTING BỊ ẨN
+  if (row.status !== "active") {
+    return withCors(bad("Listing not available", 404));
+  }
+
+  return withCors(ok({ item: row }));
+}
+
+if (path === "/api/admin/users" && req.method === "GET") {
+  const admin = await requireAdmin(req, env);
+  if (!admin) return withCors(bad("Unauthorized", 401));
+
+  const rows = await env.DB.prepare(`
+    SELECT id, username, status, created_at
+    FROM users
+    ORDER BY created_at DESC
+    LIMIT 200
+  `).all();
+
+  return withCors(ok({ users: rows.results || [] }));
+}
+
+if (path === "/api/admin/users/ban" && req.method === "POST") {
+  const admin = await requireAdmin(req, env);
+  if (!admin) return withCors(bad("Unauthorized", 401));
+
+  const { user_id, banned } = await readJson(req);
+  if (!user_id) return withCors(bad("Missing user_id"));
+
+  const status = banned ? "banned" : "active";
+  const now = Date.now();
+
+  // update user
+  await env.DB.prepare(
+    "UPDATE users SET status=?, updated_at=? WHERE id=?"
+  ).bind(status, now, user_id).run();
+
+  // ẨN / HIỆN listings
+  if (banned) {
+    await env.DB.prepare(
+      "UPDATE listings SET status='hidden' WHERE seller_id=? AND status='active'"
+    ).bind(user_id).run();
+  } else {
+    await env.DB.prepare(
+      "UPDATE listings SET status='active' WHERE seller_id=? AND status='hidden'"
+    ).bind(user_id).run();
+  }
+
+  return withCors(ok({ user_id, status }));
+}
+
+if (path === "/api/admin/users/balance" && req.method === "POST") {
+  const admin = await requireAdmin(req, env);
+  if (!admin) return withCors(bad("Unauthorized", 401));
+
+  const { user_id, amount_cents, note } = await readJson(req);
+  if (!user_id || !Number.isFinite(amount_cents) || amount_cents === 0)
+    return withCors(bad("Invalid input"));
+
+  const now = Date.now();
+
+  // ensure wallet exists
+  await env.DB.prepare(
+    "INSERT INTO wallets(user_id, balance_cents, updated_at) VALUES (?, 0, ?) ON CONFLICT(user_id) DO NOTHING"
+  ).bind(user_id, now).run();
+
+  // update balance
+  await env.DB.prepare(
+    "UPDATE wallets SET balance_cents = balance_cents + ?, updated_at=? WHERE user_id=?"
+  ).bind(amount_cents, now, user_id).run();
+
+  // ledger
+  await env.DB.prepare(
+    `INSERT INTO wallet_ledger
+     (id, user_id, type, amount_cents, ref_type, ref_id, note, created_at)
+     VALUES (?, ?, 'admin_adjust', ?, 'admin', ?, ?, ?)`
+  ).bind(
+    crypto.randomUUID(),
+    user_id,
+    amount_cents,
+    admin.userId,
+    note || "Admin điều chỉnh số dư",
+    now
+  ).run();
+
+  return withCors(ok({ user_id, amount_cents }));
+}
 
       // -------- PURCHASE --------
 // POST /api/orders (BUY ALL)
@@ -327,27 +423,48 @@ if (path === "/api/orders" && req.method === "POST") {
   if (!body || !body.listing_id)
     return withCors(bad("Missing listing_id"));
 
-  // 🔒 LẤY LISTING
+  // 🔒 LẤY LISTING + STATUS SELLER
   const listing = await env.DB.prepare(
-    "SELECT id, seller_id, kind, price_cents, quantity, status FROM listings WHERE id=?"
+    `SELECT
+        l.id,
+        l.seller_id,
+        l.kind,
+        l.price_cents,
+        l.quantity,
+        l.status,
+        u.status AS seller_status
+     FROM listings l
+     JOIN users u ON u.id = l.seller_id
+     WHERE l.id = ?`
   ).bind(body.listing_id).first();
 
-  if (!listing || listing.status !== "active")
+  if (!listing)
+    return withCors(bad("Listing not found", 404));
+
+  // 🔒 CHECK LISTING
+  if (listing.status !== "active")
     return withCors(bad("Listing not available", 404));
 
+  // 🔒 CHECK SELLER
+  if (listing.seller_status !== "active")
+    return withCors(bad("Seller is banned", 403));
+
+  // 🔒 KHÔNG MUA CỦA CHÍNH MÌNH
   if (listing.seller_id === u.userId)
     return withCors(bad("Cannot buy your own listing", 400));
 
+  // 🔒 HẾT HÀNG
   if (listing.quantity <= 0)
     return withCors(bad("Out of stock", 400));
 
   // ✅ MUA TRỌN GÓI
-  const boughtQty = listing.quantity;     // VD: 388
-  const subtotal = listing.price_cents;   // GIÁ TRỌN GÓI
+  const boughtQty = listing.quantity;   // VD: 388
+  const subtotal = listing.price_cents; // GIÁ TRỌN GÓI
 
   const platformFee = Math.round(subtotal * 0.05);
   const sellerIncome = subtotal - platformFee;
 
+  // 🔒 CHECK WALLET BUYER
   const buyerWallet = await env.DB.prepare(
     "SELECT balance_cents FROM wallets WHERE user_id=?"
   ).bind(u.userId).first();
@@ -358,29 +475,37 @@ if (path === "/api/orders" && req.method === "POST") {
   const now = Date.now();
   const orderId = crypto.randomUUID();
 
-  // 🔐 CHỐNG 2 NGƯỜI MUA CÙNG LÚC (ATOMIC)
+  // 🔐 ATOMIC LOCK – CHỈ 1 NGƯỜI MUA ĐƯỢC
   const lock = await env.DB.prepare(
-    "UPDATE listings SET quantity=0, status='sold_out', updated_at=? WHERE id=? AND quantity>0"
+    `UPDATE listings
+     SET quantity = 0,
+         status = 'sold_out',
+         updated_at = ?
+     WHERE id = ?
+       AND quantity > 0
+       AND status = 'active'`
   ).bind(now, listing.id).run();
 
   if (lock.changes === 0)
     return withCors(bad("Listing already sold", 409));
 
-  // 1️⃣ trừ tiền buyer
+  // 1️⃣ TRỪ TIỀN BUYER
   await env.DB.prepare(
     "UPDATE wallets SET balance_cents = balance_cents - ?, updated_at=? WHERE user_id=?"
   ).bind(subtotal, now, u.userId).run();
 
-  // 2️⃣ cộng tiền seller
+  // 2️⃣ CỘNG TIỀN SELLER
   await env.DB.prepare(
     "UPDATE wallets SET balance_cents = balance_cents + ?, updated_at=? WHERE user_id=?"
   ).bind(sellerIncome, now, listing.seller_id).run();
 
-  // 3️⃣ tạo order (quantity = TOÀN BỘ)
+  // 3️⃣ TẠO ORDER (LƯU TOÀN BỘ SỐ LƯỢNG)
   await env.DB.prepare(
     `INSERT INTO orders
-     (id, buyer_id, seller_id, listing_id, unit_price_cents, quantity,
-      subtotal_cents, platform_fee_cents, seller_income_cents, status, created_at)
+     (id, buyer_id, seller_id, listing_id,
+      unit_price_cents, quantity,
+      subtotal_cents, platform_fee_cents, seller_income_cents,
+      status, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'paid', ?)`
   ).bind(
     orderId,
@@ -388,14 +513,14 @@ if (path === "/api/orders" && req.method === "POST") {
     listing.seller_id,
     listing.id,
     listing.price_cents,
-    boughtQty,          // ✅ 388
-    subtotal,           // ✅ giá trọn gói
+    boughtQty,          // ✅ mua hết
+    subtotal,
     platformFee,
     sellerIncome,
     now
   ).run();
 
-  // 4️⃣ lịch sử MUA
+  // 4️⃣ LEDGER BUYER
   await env.DB.prepare(
     `INSERT INTO wallet_ledger
      (id, user_id, type, amount_cents, ref_type, ref_id, note, created_at)
@@ -409,7 +534,7 @@ if (path === "/api/orders" && req.method === "POST") {
     now
   ).run();
 
-  // 5️⃣ lịch sử BÁN
+  // 5️⃣ LEDGER SELLER
   await env.DB.prepare(
     `INSERT INTO wallet_ledger
      (id, user_id, type, amount_cents, ref_type, ref_id, note, created_at)
@@ -428,6 +553,7 @@ if (path === "/api/orders" && req.method === "POST") {
     bought_quantity: boughtQty
   }));
 }
+
 
 
 // ===== ADMIN LIST DISPUTES =====
