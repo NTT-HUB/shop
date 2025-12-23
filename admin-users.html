@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>Admin – Users</title>
+  <link rel="stylesheet" href="assets/style.css">
+  <style>
+    table { width:100%; border-collapse:collapse; }
+    th, td { border:1px solid #fff; padding:8px; }
+    .banned { color:#f87171; font-weight:bold; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <a href="/">SHOP</a>
+    <small>Admin – Users</small>
+  </div>
+</header>
+
+<main class="container">
+  <div class="box">
+    <h2>Quản lý người dùng</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>User</th>
+          <th>Status</th>
+          <th>Số dư</th>
+          <th>Hành động</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+</main>
+
+<script src="assets/app.js"></script>
+<script>
+async function load() {
+  const r = await apiGet("/api/admin/users");
+  if (!r.ok) return alert("Unauthorized");
+
+  rows.innerHTML = r.users.map(u => `
+    <tr>
+      <td>${u.username}</td>
+      <td class="${u.status === "banned" ? "banned" : ""}">
+        ${u.status}
+      </td>
+      <td>${formatPrice(u.balance_cents)}</td>
+      <td>
+        ${
+          u.status === "active"
+            ? `<button onclick="setStatus('${u.id}','banned')">BAN</button>`
+            : `<button onclick="setStatus('${u.id}','active')">UNBAN</button>`
+        }
+        <button onclick="adjust('${u.id}', true)">+ Tiền</button>
+        <button onclick="adjust('${u.id}', false)">- Tiền</button>
+      </td>
+    </tr>
+  `).join("");
+}
+
+async function setStatus(userId, status) {
+  if (!confirm(`Xác nhận ${status === "banned" ? "BAN" : "UNBAN"} user?`)) return;
+
+  const r = await apiPost("/api/admin/users/status", {
+    user_id: userId,
+    status
+  });
+  if (!r.ok) return alert(r.error);
+  load();
+}
+
+async function adjust(userId, add) {
+  const amount = prompt(add ? "Nhập số tiền CỘNG (VNĐ):" : "Nhập số tiền TRỪ (VNĐ):");
+  if (!amount) return;
+
+  const vnd = Number(amount.replace(/[^0-9]/g,""));
+  if (!vnd) return alert("Sai số tiền");
+
+  const note = prompt("Ghi chú (tuỳ chọn):") || "";
+
+  const r = await apiPost("/api/admin/users/balance", {
+    user_id: userId,
+    amount_cents: (add ? vnd : -vnd) * 100,
+    note
+  });
+
+  if (!r.ok) return alert(r.error);
+  load();
+}
+
+load();
+</script>
+
+</body>
+</html>
