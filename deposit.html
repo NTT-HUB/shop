@@ -113,19 +113,27 @@ function showTab(tab) {
 
 /* ================= BANK ================= */
 async function depositBank() {
- const vnd = Number(bank_amount.value.replace(/\D/g, ""));
-  if (!vnd || vnd < 10000)
-    return alert("Số tiền tối thiểu 10.000đ");
+  // bỏ dấu . , chỉ lấy số
+  const vnd = Number(bank_amount.value.replace(/\D/g, ""));
+
+  if (!Number.isInteger(vnd) || vnd < 10000) {
+    alert("Số tiền nạp tối thiểu là 10.000đ");
+    bank_amount.focus();
+    return;
+  }
 
   const r = await apiPost("/api/deposits/create", {
     method: "bank",
     amount_cents: vnd * 100
   });
 
-  if (!r.ok) return alert(r.error || "Không thể tạo yêu cầu");
+  if (!r.ok) {
+    alert(r.error || "Không thể tạo yêu cầu nạp");
+    return;
+  }
 
   const qrUrl = buildVietQR({
-    bankCode: r.bank_code, // backend trả
+    bankCode: r.bank_code,
     account: r.bank_account_number,
     name: r.bank_account_name,
     amount: r.amount,
