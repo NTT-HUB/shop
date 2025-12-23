@@ -129,14 +129,18 @@ async function load() {
   }
 
   order = r.order;
+listing = r.listing;
 
-  const l = await apiGet("/api/listings/" + order.listing_id);
-  if (!l.ok) {
-    alert("Không tìm thấy sản phẩm");
-    return;
-  }
+title.innerText = listing.title;
+price.innerText = formatPrice(order.subtotal_cents);
+seller.innerText = listing.seller_username;
+contact.href = listing.contact_link || "#";
 
-  listing = l.item;
+// ✅ nếu đã feedback thì ẩn voteBox
+if (r.feedback?.type) {
+  voteBox.innerHTML = `<p class="muted"><b>✅ Bạn đã đánh giá:</b> ${r.feedback.type === "trust" ? "UY TÍN" : "SCAM"}</p>`;
+}
+
 
   // render
   title.innerText = listing.title;
