@@ -186,6 +186,21 @@ async function depositCard() {
     </div>
   `;
 }
+
+  function onlyDigits(s) {
+  return String(s || "").replace(/\D/g, "");
+}
+
+function formatMoney(v) {
+  const n = onlyDigits(v);
+  if (!n) return "";
+  return n.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+// format live khi gõ
+bank_amount.addEventListener("input", () => {
+  bank_amount.value = formatMoney(bank_amount.value);
+});
 </script>
 
 </body>
