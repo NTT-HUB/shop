@@ -642,16 +642,18 @@ if (path === "/api/my/sales" && req.method === "GET") {
 
 // GET /api/my/withdrawals
 if (path === "/api/my/withdrawals" && req.method === "GET") {
-  const u = await requireAuth(req, env);
+  let u;
+  try {
+    u = await requireAuth(req, env);
+  } catch (e) {
+    console.error("Auth error:", e);
+    return withCors(bad("Unauthorized", 401));
+  }
+
   if (!u) return withCors(bad("Unauthorized", 401));
 
   const rows = await env.DB.prepare(`
-    SELECT 
-      id,
-      amount_cents,
-      method,
-      status,
-      created_at
+    SELECT id, amount_cents, method, status, created_at
     FROM withdrawals
     WHERE user_id=?
     ORDER BY created_at DESC
