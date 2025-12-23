@@ -494,6 +494,63 @@ if (path === "/api/my/listings" && req.method === "GET") {
   return withCors(ok({ items: rows.results || [] }));
 }
 
+// GET /api/users/:username/profile
+if (path.startsWith("/api/users/") && path.endsWith("/profile") && req.method === "GET") {
+  const username = decodeURIComponent(path.split("/")[3]);
+
+  const user = await env.DB.prepare(`
+    SELECT id, username, reputation
+    FROM users
+    WHERE username=?
+  `).bind(username).first();
+
+  if (!user)
+    return withCors(bad("User not found", 404));
+
+  // tổng đơn đã bán
+  const sold = await env.DB.prepare(`
+    SELECT COUNT(*) AS total
+    FROM orders
+    WHERE seller_id=?
+      AND status='paid'
+  `).bind(user.id).first();
+
+  return withCors(ok({
+    user: {
+      username: user.username,
+      reputation: user.reputation ?? 0
+    },
+    sold_orders: sold.total ?? 0
+  }));
+}
+
+// GET /api/users/:username/sold-listings
+if (path.startsWith("/api/users/") && path.endsWith("/sold-listings") && req.method === "GET") {
+  const username = decodeURIComponent(path.split("/")[3]);
+
+  const user = await env.DB.prepare(
+    "SELECT id FROM users WHERE username=?"
+  ).bind(username).first();
+
+  if (!user)
+    return withCors(bad("User not found", 404));
+
+  const rows = await env.DB.prepare(`
+    SELECT
+      l.id,
+      l.title,
+      l.price_cents,
+      o.created_at AS sold_at
+    FROM orders o
+    JOIN listings l ON l.id=o.listing_id
+    WHERE o.seller_id=?
+      AND o.status='paid'
+    ORDER BY o.created_at DESC
+    LIMIT 50
+  `).bind(user.id).all();
+
+  return withCors(ok({ items: rows.results || [] }));
+}
 
       // -------- PURCHASE --------
 // POST /api/orders (BUY ALL)
