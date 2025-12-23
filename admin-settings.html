@@ -39,6 +39,15 @@
     <label>Phí Thẻ (%)</label>
     <input id="card_fee_percent" type="number">
 
+    <!-- ================= BANK INFO ================= -->
+    <h3 style="margin-top:20px;">Thông tin ngân hàng (hiển thị)</h3>
+
+    <label>Tên ngân hàng</label>
+    <input id="bank_name" placeholder="VD: MB Bank">
+
+    <label>Tên chủ tài khoản</label>
+    <input id="bank_account_name" placeholder="VD: NGUYEN VAN A">
+
     <!-- ================= BANK (WEB2M) ================= -->
     <h3 style="margin-top:20px;">Ngân hàng nạp (Web2M)</h3>
 
@@ -95,16 +104,24 @@ async function save() {
   msg.innerText = "Đang lưu...";
 
   const body = {
+    // site
     site_name: site_name.value,
     site_tagline: site_tagline.value,
 
+    // fee
     bank_fee_percent: bank_fee_percent.value,
     card_fee_percent: card_fee_percent.value,
 
+    // bank display
+    bank_name: bank_name.value,
+    bank_account_name: bank_account_name.value,
+
+    // web2m
     web2m_token: web2m_token.value,
     web2m_bank_account: web2m_bank_account.value,
     web2m_prefix: web2m_prefix.value,
 
+    // card
     card_provider: card_provider.value,
     card_partner_id: card_partner_id.value,
     card_api_key: card_api_key.value,
