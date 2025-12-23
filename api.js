@@ -1363,7 +1363,7 @@ if (path === "/api/webhooks/card" && req.method === "POST") {
 }
 
 
-    // GET /api/orders/:id
+ // GET /api/orders/:id
 if (
   path.startsWith("/api/orders/") &&
   req.method === "GET" &&
@@ -1375,63 +1375,51 @@ if (
 
   const orderId = path.split("/").pop();
 
-  // ✅ LẤY ORDER + LISTING + SELLER (kể cả listing sold_out/ẩn)
-  const row = await env.DB.prepare(`
-    SELECT
-      o.*,
-      l.title AS listing_title,
-      l.kind AS listing_kind,
-      l.contact_link AS listing_contact_link,
-      s.username AS seller_username,
-      s.reputation AS seller_reputation
-    FROM orders o
-    JOIN listings l ON l.id = o.listing_id
-    JOIN users s ON s.id = o.seller_id
-    WHERE o.id = ?
-    LIMIT 1
-  `).bind(orderId).first();
+  // 1️⃣ LẤY ORDER
+  const order = await env.DB
+    .prepare("SELECT * FROM orders WHERE id=?")
+    .bind(orderId)
+    .first();
 
-  if (!row) return withCors(bad("Not found", 404));
+  if (!order) return withCors(bad("Not found", 404));
 
-  // quyền xem
-  if (row.buyer_id !== u.userId && row.seller_id !== u.userId && u.role !== "admin") {
+  if (
+    order.buyer_id !== u.userId &&
+    order.seller_id !== u.userId &&
+    u.role !== "admin"
+  ) {
     return withCors(bad("Forbidden", 403));
   }
 
-  // ✅ CHECK ĐÃ FEEDBACK CHƯA (buyer đánh giá)
-  const fb = await env.DB.prepare(`
+  // 2️⃣ LẤY LISTING (KỂ CẢ ĐÃ SOLD)
+  const listing = await env.DB.prepare(`
+    SELECT 
+      l.id,
+      l.title,
+      l.kind,
+      l.price_cents,
+      l.contact_link,
+      l.seller_id,
+      u.username AS seller_username,
+      u.reputation AS seller_reputation
+    FROM listings l
+    JOIN users u ON u.id = l.seller_id
+    WHERE l.id = ?
+  `).bind(order.listing_id).first();
+
+  // 3️⃣ LẤY FEEDBACK (NẾU CÓ)
+  const feedback = await env.DB.prepare(`
     SELECT type, created_at
     FROM feedback
-    WHERE order_id = ? AND user_id = ?
+    WHERE order_id = ?
     LIMIT 1
-  `).bind(orderId, row.buyer_id).first();
+  `).bind(orderId).first();
 
-  const res = ok({
-    order: {
-      id: row.id,
-      buyer_id: row.buyer_id,
-      seller_id: row.seller_id,
-      listing_id: row.listing_id,
-      unit_price_cents: row.unit_price_cents,
-      quantity: row.quantity,
-      subtotal_cents: row.subtotal_cents,
-      platform_fee_cents: row.platform_fee_cents,
-      seller_income_cents: row.seller_income_cents,
-      status: row.status,
-      created_at: row.created_at
-    },
-    listing: {
-      title: row.listing_title,
-      kind: row.listing_kind,
-      contact_link: row.listing_contact_link,
-      seller_username: row.seller_username,
-      seller_reputation: row.seller_reputation
-    },
-    feedback: fb ? { type: fb.type, created_at: fb.created_at } : null
-  });
-
-  res.headers.set("Cache-Control", "no-store");
-  return withCors(res);
+  return withCors(ok({
+    order,
+    listing,     // ✅ CÁI FRONT-END ĐANG CẦN
+    feedback     // ✅ ĐỂ KHÓA VOTE
+  }));
 }
 
 
