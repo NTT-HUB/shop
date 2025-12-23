@@ -1363,7 +1363,7 @@ if (path === "/api/webhooks/card" && req.method === "POST") {
 }
 
 
- // GET /api/orders/:id
+// GET /api/orders/:id
 if (
   path.startsWith("/api/orders/") &&
   req.method === "GET" &&
@@ -1375,7 +1375,6 @@ if (
 
   const orderId = path.split("/").pop();
 
-  // LẤY ORDER + LISTING + SELLER (kể cả sold_out)
   const row = await env.DB.prepare(`
     SELECT
       o.*,
@@ -1385,15 +1384,14 @@ if (
       s.username AS seller_username,
       s.reputation AS seller_reputation
     FROM orders o
-    JOIN listings l ON l.id = o.listing_id
-    JOIN users s ON s.id = o.seller_id
+    LEFT JOIN listings l ON l.id = o.listing_id
+    LEFT JOIN users s ON s.id = o.seller_id
     WHERE o.id = ?
     LIMIT 1
   `).bind(orderId).first();
 
   if (!row) return withCors(bad("Not found", 404));
 
-  // check quyền
   if (
     row.buyer_id !== u.userId &&
     row.seller_id !== u.userId &&
@@ -1401,6 +1399,38 @@ if (
   ) {
     return withCors(bad("Forbidden", 403));
   }
+
+  // ✅ LẤY FEEDBACK
+  const fb = await env.DB.prepare(`
+    SELECT type, created_at
+    FROM feedback
+    WHERE order_id = ? AND buyer_id = ?
+    LIMIT 1
+  `).bind(orderId, row.buyer_id).first();
+
+  return withCors(ok({
+    order: {
+      id: row.id,
+      buyer_id: row.buyer_id,
+      seller_id: row.seller_id,
+      listing_id: row.listing_id,
+      subtotal_cents: row.subtotal_cents,
+      status: row.status,
+      created_at: row.created_at
+    },
+    listing: {
+      title: row.listing_title,
+      kind: row.listing_kind,
+      contact_link: row.listing_contact_link,
+      seller_username: row.seller_username,
+      seller_reputation: row.seller_reputation
+    },
+    feedback: fb ? {
+      type: fb.type,
+      created_at: fb.created_at
+    } : null
+  }));
+}
 
   // ===== CHECK FEEDBACK =====
   const fb = await env.DB.prepare(`
