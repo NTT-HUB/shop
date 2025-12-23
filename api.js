@@ -649,8 +649,10 @@ if (path === "/api/my/withdrawals" && req.method === "GET") {
     const rows = await env.DB.prepare(`
       SELECT
         id,
-        amount,        -- ✅ CỘT ĐÚNG
-        method,
+        gross_cents,
+        fee_cents,
+        net_cents,
+        bank_info,
         status,
         created_at
       FROM withdrawals
@@ -659,11 +661,19 @@ if (path === "/api/my/withdrawals" && req.method === "GET") {
       LIMIT 100
     `).bind(u.userId).all();
 
-    // chuẩn hoá cho frontend dùng formatPrice
     const items = (rows.results || []).map(w => ({
       id: w.id,
-      amount_cents: w.amount * 100, // ✅ convert sang cents
-      method: w.method,
+      amount_cents: w.gross_cents,     // frontend dùng formatPrice
+      fee_cents: w.fee_cents,
+      net_cents: w.net_cents,
+      method: (() => {
+        try {
+          const info = JSON.parse(w.bank_info || "{}");
+          return info.type || "bank";
+        } catch {
+          return "bank";
+        }
+      })(),
       status: w.status,
       created_at: w.created_at
     }));
@@ -672,6 +682,7 @@ if (path === "/api/my/withdrawals" && req.method === "GET") {
     res.headers.set("Cache-Control", "no-store");
     return withCors(res);
   } catch (e) {
+    console.error("WITHDRAW LIST ERROR:", e);
     return withCors(bad("Withdrawals SQL error: " + e.message, 500));
   }
 }
