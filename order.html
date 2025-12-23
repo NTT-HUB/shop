@@ -120,7 +120,7 @@ let warrantyUntil = null;
 async function load() {
   const r = await fetch(API + "/api/orders/" + orderId, {
     credentials: "include"
-  }).then(r => r.json());
+  }).then(res => res.json());
 
   if (!r.ok) {
     alert(r.error || "Không tìm thấy đơn hàng");
@@ -129,27 +129,52 @@ async function load() {
   }
 
   order = r.order;
-listing = r.listing;
+  listing = r.listing;
 
-title.innerText = listing.title;
-price.innerText = formatPrice(order.subtotal_cents);
-seller.innerText = listing.seller_username;
-contact.href = listing.contact_link || "#";
+  // ✅ chống lỗi listing undefined
+  if (!listing) {
+    alert("Thiếu dữ liệu sản phẩm (listing). Kiểm tra API /api/orders/:id trả field listing.");
+    return;
+  }
 
-// ✅ nếu đã feedback thì ẩn voteBox
-if (r.feedback?.type) {
-  voteBox.innerHTML = `<p class="muted"><b>✅ Bạn đã đánh giá:</b> ${r.feedback.type === "trust" ? "UY TÍN" : "SCAM"}</p>`;
-}
-
-
-  // render
-  title.innerText = listing.title;
+  // ===== RENDER =====
+  title.innerText = listing.title || ("Đơn hàng #" + orderId.slice(0, 6));
   price.innerText = formatPrice(order.subtotal_cents);
-  seller.innerText = listing.seller_username;
-  contact.href = listing.contact_link || "#";
+  seller.innerText = listing.seller_username || "Không rõ";
 
+  // contact
+  if (listing.contact_link) {
+    contact.href = listing.contact_link;
+    contact.textContent = "Nhấn để liên hệ";
+    contact.style.pointerEvents = "auto";
+    contact.style.opacity = "1";
+  } else {
+    contact.removeAttribute("href");
+    contact.textContent = "Không có liên hệ";
+    contact.style.pointerEvents = "none";
+    contact.style.opacity = "0.7";
+  }
+
+  // ===== AC =====
   if (listing.kind === "ac") {
     await loadAC();
+  } else {
+    // không phải AC thì ẩn box AC/timer (nếu có)
+    if (typeof acBox !== "undefined") acBox.classList.add("hide");
+    if (typeof timerBox !== "undefined") timerBox.classList.add("hide");
+  }
+
+  // ✅ nếu đã feedback -> KHÓA vote
+  if (r.feedback?.type) {
+    voteBox.innerHTML = `
+      <p class="muted">
+        ✅ Bạn đã đánh giá:
+        <b>${r.feedback.type === "trust" ? "UY TÍN" : "SCAM"}</b>
+      </p>
+    `;
+    voteBox.dataset.locked = "1";
+  } else {
+    voteBox.dataset.locked = "0";
   }
 }
 
@@ -157,14 +182,15 @@ if (r.feedback?.type) {
 async function loadAC() {
   const s = await fetch(API + "/api/orders/" + orderId + "/secret", {
     credentials: "include"
-  }).then(r => r.json());
+  }).then(res => res.json());
 
   if (s.ok && s.secret_txt) {
     acSecret.innerText = s.secret_txt;
     acBox.classList.remove("hide");
   }
 
-  warrantyUntil = order.created_at + 3 * 60 * 1000;
+  // timer 3 phút tính từ created_at
+  warrantyUntil = Number(order.created_at) + 3 * 60 * 1000;
   timerBox.classList.remove("hide");
   startTimer();
 }
@@ -176,13 +202,14 @@ function startTimer() {
 
     if (left <= 0) {
       timer.innerText = "00:00";
-      voteBox.classList.add("hide");
+      // hết thời gian thì ẩn vote (tuỳ bạn)
+      // voteBox.classList.add("hide");
       return;
     }
 
-    const s = Math.floor(left / 1000);
-    const mm = String(Math.floor(s / 60)).padStart(2, "0");
-    const ss = String(s % 60).padStart(2, "0");
+    const sec = Math.floor(left / 1000);
+    const mm = String(Math.floor(sec / 60)).padStart(2, "0");
+    const ss = String(sec % 60).padStart(2, "0");
     timer.innerText = `${mm}:${ss}`;
 
     setTimeout(tick, 1000);
@@ -192,6 +219,9 @@ function startTimer() {
 
 // ===== FEEDBACK =====
 async function vote(type) {
+  // ✅ chặn spam click + chặn vote lại nếu đã khóa
+  if (voteBox.dataset.locked === "1") return;
+
   if (type === "scam") {
     const note = prompt("Mô tả lý do báo scam (bắt buộc):");
     if (!note) return;
@@ -207,27 +237,30 @@ async function vote(type) {
     }
 
     alert("Đã gửi báo scam. Admin sẽ xem xét.");
-    voteBox.classList.add("hide");
+    voteBox.dataset.locked = "1";
+    voteBox.innerHTML = `<p class="muted"><b>✅ Đã gửi báo scam</b></p>`;
     return;
   }
 
   // trust
-  const r = await apiPost("/api/orders/" + orderId + "/feedback", {
+  const rr = await apiPost("/api/orders/" + orderId + "/feedback", {
     type: "trust"
   });
 
-  if (!r.ok) {
-    alert(r.error || "Không thể gửi đánh giá");
+  if (!rr.ok) {
+    alert(rr.error || "Không thể gửi đánh giá");
     return;
   }
 
   alert("Cảm ơn bạn đã đánh giá!");
-  voteBox.classList.add("hide");
+  voteBox.dataset.locked = "1";
+  voteBox.innerHTML = `<p class="muted"><b>✅ Bạn đã đánh giá: UY TÍN</b></p>`;
 }
 
 // ===== INIT =====
 load();
 </script>
+
 
 </body>
 </html>
