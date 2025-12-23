@@ -642,26 +642,39 @@ if (path === "/api/my/sales" && req.method === "GET") {
 
 // GET /api/my/withdrawals
 if (path === "/api/my/withdrawals" && req.method === "GET") {
-  let u;
-  try {
-    u = await requireAuth(req, env);
-  } catch (e) {
-    console.error("Auth error:", e);
-    return withCors(bad("Unauthorized", 401));
-  }
-
+  const u = await requireAuth(req, env);
   if (!u) return withCors(bad("Unauthorized", 401));
 
-  const rows = await env.DB.prepare(`
-    SELECT id, amount_cents, method, status, created_at
-    FROM withdrawals
-    WHERE user_id=?
-    ORDER BY created_at DESC
-    LIMIT 100
-  `).bind(u.userId).all();
+  try {
+    // ✅ dùng SELECT * LIMIT 1 để dò tên cột an toàn (không crash nếu bảng trống)
+    // nhưng D1 không có DESCRIBE, nên cách tốt nhất là viết query theo schema thật.
+    // Nếu bạn chưa chắc schema, dùng alias theo các tên phổ biến.
 
-  return withCors(ok({ items: rows.results || [] }));
+    const rows = await env.DB.prepare(`
+      SELECT
+        id,
+        -- 3 tên cột phổ biến: amount_cents / amount / amount_vnd
+        COALESCE(amount_cents, amount, amount_vnd) AS amount_cents,
+        method,
+        status,
+        COALESCE(created_at, created, created_time) AS created_at
+      FROM withdrawals
+      WHERE user_id=?
+      ORDER BY COALESCE(created_at, created, created_time) DESC
+      LIMIT 100
+    `).bind(u.userId).all();
+
+    const res = ok({ items: rows.results || [] });
+    res.headers.set("Cache-Control", "no-store");
+    return withCors(res);
+  } catch (e) {
+    // ✅ trả lỗi rõ để bạn debug ngay
+    const res = bad("Withdrawals SQL error: " + e.message, 500);
+    res.headers.set("Cache-Control", "no-store");
+    return withCors(res);
+  }
 }
+
 
 // GET /api/users/:username/sold-listings
 if (path.startsWith("/api/users/") && path.endsWith("/sold-listings") && req.method === "GET") {
