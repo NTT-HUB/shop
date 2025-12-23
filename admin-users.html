@@ -5,9 +5,43 @@
   <title>Admin – Users</title>
   <link rel="stylesheet" href="assets/style.css">
   <style>
-    table { width:100%; border-collapse:collapse; }
-    th, td { border:1px solid #fff; padding:8px; }
-    .banned { color:#f87171; font-weight:bold; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid #fff;
+      padding: 6px 8px;
+      white-space: nowrap;
+      vertical-align: middle;
+    }
+    th {
+      text-align: left;
+      background: #111;
+    }
+    .banned {
+      color: #f87171;
+      font-weight: bold;
+    }
+    .actions {
+      display: flex;
+      gap: 6px;
+    }
+    .actions button {
+      padding: 4px 8px;
+      font-size: 12px;
+    }
+    .search-box {
+      margin-bottom: 10px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .search-box input {
+      max-width: 260px;
+      margin: 0;
+    }
   </style>
 </head>
 <body>
@@ -15,17 +49,24 @@
 <header>
   <div class="brand">
     <a href="/">SHOP</a>
-    <small>Admin – Users</small>
+    <small>Admin – Quản lý người dùng</small>
   </div>
 </header>
 
 <main class="container">
   <div class="box">
-    <h2>Quản lý người dùng</h2>
+    <h2>Users</h2>
+
+    <!-- SEARCH -->
+    <div class="search-box">
+      <input id="q" placeholder="Tìm theo username…">
+      <button class="btn" onclick="load()">Tìm</button>
+    </div>
+
     <table>
       <thead>
         <tr>
-          <th>User</th>
+          <th>Username</th>
           <th>Status</th>
           <th>Số dư</th>
           <th>Hành động</th>
@@ -39,10 +80,19 @@
 <script src="assets/app.js"></script>
 <script>
 async function load() {
+  const keyword = q.value.trim().toLowerCase();
   const r = await apiGet("/api/admin/users");
   if (!r.ok) return alert("Unauthorized");
 
-  rows.innerHTML = r.users.map(u => `
+  let users = r.users || [];
+
+  if (keyword) {
+    users = users.filter(u =>
+      u.username.toLowerCase().includes(keyword)
+    );
+  }
+
+  rows.innerHTML = users.map(u => `
     <tr>
       <td>${u.username}</td>
       <td class="${u.status === "banned" ? "banned" : ""}">
@@ -50,20 +100,22 @@ async function load() {
       </td>
       <td>${formatPrice(u.balance_cents)}</td>
       <td>
-        ${
-          u.status === "active"
-            ? `<button onclick="setStatus('${u.id}','banned')">BAN</button>`
-            : `<button onclick="setStatus('${u.id}','active')">UNBAN</button>`
-        }
-        <button onclick="adjust('${u.id}', true)">+ Tiền</button>
-        <button onclick="adjust('${u.id}', false)">- Tiền</button>
+        <div class="actions">
+          ${
+            u.status === "active"
+              ? `<button onclick="setStatus('${u.id}','banned')">Ban</button>`
+              : `<button onclick="setStatus('${u.id}','active')">Unban</button>`
+          }
+          <button onclick="adjust('${u.id}', true)">+Tiền</button>
+          <button onclick="adjust('${u.id}', false)">-Tiền</button>
+        </div>
       </td>
     </tr>
   `).join("");
 }
 
 async function setStatus(userId, status) {
-  if (!confirm(`Xác nhận ${status === "banned" ? "BAN" : "UNBAN"} user?`)) return;
+  if (!confirm(`${status === "banned" ? "BAN" : "UNBAN"} user này?`)) return;
 
   const r = await apiPost("/api/admin/users/status", {
     user_id: userId,
