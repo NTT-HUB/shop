@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>Thông tin người bán</title>
+  <link rel="stylesheet" href="assets/style.css">
+  <style>
+    .profile {
+      border:2px solid #000;
+      padding:15px;
+      margin-bottom:15px;
+    }
+    table {
+      width:100%;
+      border-collapse:collapse;
+      font-size:14px;
+    }
+    th, td {
+      border:1px solid #000;
+      padding:6px;
+    }
+    th {
+      background:#111;
+      color:#fff;
+      text-align:left;
+    }
+    .right { text-align:right; }
+    .muted-sm { font-size:12px; color:#777; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <a href="/">SHOP</a>
+    <small>Thông tin người bán</small>
+  </div>
+</header>
+
+<main class="container">
+  <div class="profile">
+    <h2 id="username">...</h2>
+   _attach
+    <p>Uy tín: <b id="reputation">0</b></p>
+    <p>Số đơn đã bán: <b id="sold">0</b></p>
+  </div>
+
+  <div class="box">
+    <h3>📦 Các đơn hàng đã bán</h3>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Tên sản phẩm</th>
+          <th class="right">Giá</th>
+          <th>Thời gian bán</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+
+    <p id="empty" class="muted-sm" hidden>
+      Người bán này chưa có đơn hàng nào.
+    </p>
+  </div>
+</main>
+
+<script src="assets/app.js"></script>
+<script>
+const usernameParam = new URLSearchParams(location.search).get("user");
+if (!usernameParam) {
+  alert("Thiếu username");
+  location.href = "/";
+}
+
+// LOAD PROFILE
+async function loadProfile() {
+  const r = await apiGet(`/api/users/${encodeURIComponent(usernameParam)}/profile`);
+  if (!r.ok) {
+    alert(r.error || "Không tìm thấy người bán");
+    return;
+  }
+
+  username.innerText = r.user.username;
+  reputation.innerText = r.user.reputation;
+  sold.innerText = r.sold_orders;
+}
+
+// LOAD SOLD LISTINGS
+async function loadSold() {
+  const r = await apiGet(`/api/users/${encodeURIComponent(usernameParam)}/sold-listings`);
+  if (!r.ok) return;
+
+  rows.innerHTML = "";
+  empty.hidden = (r.items || []).length !== 0;
+
+  for (const i of (r.items || [])) {
+    rows.innerHTML += `
+      <tr>
+        <td>${i.title}</td>
+        <td class="right">${formatPrice(i.price_cents)}</td>
+        <td>${new Date(i.sold_at).toLocaleString()}</td>
+      </tr>
+    `;
+  }
+}
+
+loadProfile();
+loadSold();
+</script>
+
+</body>
+</html>
