@@ -616,6 +616,51 @@ if (path.startsWith("/api/users/") && path.endsWith("/profile") && req.method ==
   }));
 }
 
+// GET /api/my/sales
+if (path === "/api/my/sales" && req.method === "GET") {
+  const u = await requireAuth(req, env);
+  if (!u) return withCors(bad("Unauthorized", 401));
+
+  const rows = await env.DB.prepare(`
+    SELECT 
+      o.id,
+      o.quantity,
+      o.seller_income_cents,
+      o.created_at,
+      l.title,
+      u2.username AS buyer_username
+    FROM orders o
+    JOIN listings l ON l.id = o.listing_id
+    JOIN users u2 ON u2.id = o.buyer_id
+    WHERE o.seller_id = ?
+    ORDER BY o.created_at DESC
+    LIMIT 100
+  `).bind(u.userId).all();
+
+  return withCors(ok({ items: rows.results || [] }));
+}
+
+// GET /api/my/withdrawals
+if (path === "/api/my/withdrawals" && req.method === "GET") {
+  const u = await requireAuth(req, env);
+  if (!u) return withCors(bad("Unauthorized", 401));
+
+  const rows = await env.DB.prepare(`
+    SELECT 
+      id,
+      amount_cents,
+      method,
+      status,
+      created_at
+    FROM withdrawals
+    WHERE user_id=?
+    ORDER BY created_at DESC
+    LIMIT 100
+  `).bind(u.userId).all();
+
+  return withCors(ok({ items: rows.results || [] }));
+}
+
 // GET /api/users/:username/sold-listings
 if (path.startsWith("/api/users/") && path.endsWith("/sold-listings") && req.method === "GET") {
   const username = decodeURIComponent(path.split("/")[3]);
