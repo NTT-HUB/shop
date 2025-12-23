@@ -78,28 +78,31 @@ function switchMethod() {
 
 async function withdraw() {
   msg.innerText = "Đang xử lý...";
-  const amountCents = Number(amount.value);
 
-  if (!amountCents || amountCents <= 0) {
-    msg.innerText = "Số tiền không hợp lệ";
+  // lấy số tiền thật (bỏ dấu .)
+  const vnd = Number(amount.value.replace(/\D/g, ""));
+
+  if (!Number.isInteger(vnd) || vnd < 50000) {
+    msg.innerText = "Số tiền rút tối thiểu là 50.000đ";
+    amount.focus();
     return;
   }
 
   let body = {
     method: method.value,
-    amount_cents: amountCents
+    amount_cents: vnd * 100
   };
 
   if (method.value === "bank") {
     body.bank = {
-      name: bankName.value,
-      owner: bankOwner.value,
-      number: bankNumber.value
+      name: bankName.value.trim(),
+      owner: bankOwner.value.trim(),
+      number: bankNumber.value.trim()
     };
   } else {
     body.card = {
-      username: cardUser.value,
-      contact: cardContact.value
+      username: cardUser.value.trim(),
+      contact: cardContact.value.trim()
     };
   }
 
