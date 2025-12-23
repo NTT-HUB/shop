@@ -22,6 +22,7 @@
       border: 2px solid #fff;
       font-weight: bold;
       cursor: pointer;
+      padding: 8px 12px;
     }
     .btnRed {
       background: #c00;
@@ -29,15 +30,18 @@
       border: 2px solid #fff;
       font-weight: bold;
       cursor: pointer;
+      padding: 8px 12px;
     }
-    .hide {
-      display: none;
+    .hide { display: none; }
+    textarea {
+      width: 100%;
+      min-height: 80px;
+      margin-top: 8px;
     }
     pre {
       background: #000;
       color: #0f0;
       padding: 12px;
-      overflow: auto;
       border: 2px dashed #fff;
       white-space: pre-wrap;
       word-break: break-word;
@@ -48,7 +52,7 @@
 
 <header>
   <div class="brand">
-   <a href="/" id="siteName">SHOP</a>
+    <a href="/" id="siteName">SHOP</a>
     <small>Chi tiết đơn hàng</small>
   </div>
   <nav>
@@ -58,53 +62,47 @@
 
 <main class="container">
   <div class="box">
-    <h2 id="title">...</h2>
+    <h2 id="title">Đơn hàng</h2>
 
+    <p><b>Giá trọn gói:</b> <span id="price"></span></p>
+    <p><b>Người bán:</b> <span id="seller"></span></p>
     <p>
-      <b>Giá trọn gói:</b>
-      <span id="price"></span>
-      <span class="muted">(mua 1 lần)</span>
-    </p>
-
-    <p>
-      <b>Người bán:</b>
-      <span id="seller"></span>
-    </p>
-
-    <p>
-      <b>Liên hệ người bán:</b>
-      <a id="contact" href="#" target="_blank" rel="noopener">Nhấn để liên hệ</a>
+      <b>Liên hệ:</b>
+      <a id="contact" href="#" target="_blank" rel="noopener">Liên hệ người bán</a>
     </p>
 
     <!-- AC SECRET -->
     <div id="acBox" class="notice hide">
       <h3>🔐 Thông tin tài khoản (AC)</h3>
-      <p class="muted">
-        Đây là thông tin bí mật, chỉ hiển thị sau khi thanh toán thành công.
-      </p>
       <pre id="acSecret"></pre>
     </div>
 
-    <!-- WARRANTY TIMER -->
+    <!-- WARRANTY -->
     <div id="timerBox" class="notice hide">
-      <b>⏳ Thời gian bảo hành AC:</b>
-      <span id="timer">03:00</span><br>
-      <span class="muted">
-        Hết thời gian này, đơn hàng sẽ tự động chốt uy tín.
-      </span>
+      ⏳ Thời gian bảo hành AC: <b id="timer">03:00</b>
     </div>
 
-    <!-- FEEDBACK / DISPUTE -->
-    <div id="voteBox" class="notice">
-      <p>
-        Bạn đã mua <b>1 đơn trọn gói</b> của sản phẩm này.<br>
-        Sau khi nhận hàng, vui lòng đánh giá để hoàn tất giao dịch.
-      </p>
+    <!-- FEEDBACK -->
+    <div id="voteBox" class="notice hide">
+      <p class="muted">Sau khi nhận hàng, vui lòng đánh giá:</p>
       <div class="btnRow">
-        <button class="btnGreen" onclick="vote('trust')">✅ UY TÍN</button>
-        <button class="btnRed" onclick="vote('scam')">⚠️ BÁO SCAM</button>
+        <button class="btnGreen" onclick="voteTrust()">✅ UY TÍN</button>
+        <button class="btnRed" onclick="openReport()">⚠️ BÁO SCAM</button>
       </div>
     </div>
+
+    <!-- REPORT -->
+    <div id="reportBox" class="notice hide">
+      <h3>⚠️ Báo cáo scam</h3>
+      <textarea id="reportText"
+        placeholder="Mô tả chi tiết lý do báo scam (bắt buộc)"></textarea>
+      <div class="btnRow">
+        <button class="btnRed" onclick="submitReport()">Gửi báo cáo</button>
+        <button class="btn" onclick="closeReport()">Hủy</button>
+      </div>
+    </div>
+
+    <div id="resultBox" class="notice hide"></div>
   </div>
 </main>
 
@@ -112,101 +110,110 @@
 <script>
 const orderId = new URLSearchParams(location.search).get("id");
 
-let order = null;
-let listing = null;
-let warrantyUntil = null;
+let order, listing, warrantyUntil, voted = false;
 
+// ===== LOAD =====
 async function load() {
   const r = await apiGet("/api/orders/" + orderId + "?_=" + Date.now());
-
   if (!r.ok) {
     alert(r.error || "Không tìm thấy đơn hàng");
-    location.href = "/dashboard.html";
-    return;
+    return location.href = "/dashboard.html";
   }
 
   order = r.order;
   listing = r.listing;
 
-  if (!listing) {
-    title.innerText = "Đơn hàng";
-    price.innerText = formatPrice(order.subtotal_cents);
-    seller.innerText = "(Không tìm thấy thông tin sản phẩm)";
-    contact.href = "#";
-    voteBox.classList.add("hide");
-    return;
-  }
-
-  title.innerText = listing.title;
   price.innerText = formatPrice(order.subtotal_cents);
-  seller.innerText = listing.seller_username || "(ẩn)";
-  contact.href = listing.contact_link || "#";
 
-  // ✅ nếu đã feedback thì không cho bấm lại
+  if (listing) {
+    title.innerText = listing.title;
+    seller.innerText = listing.seller_username || "(ẩn)";
+    contact.href = listing.contact_link || "#";
+  } else {
+    seller.innerText = "(Sản phẩm đã ẩn)";
+    contact.href = "#";
+  }
+
+  // đã đánh giá
   if (r.feedback?.type) {
-    voteBox.innerHTML = `
-      <p class="muted"><b>✅ Bạn đã đánh giá:</b>
-        ${r.feedback.type === "trust" ? "UY TÍN" : "SCAM"}
-      </p>
-    `;
+    voted = true;
+    showResult(r.feedback.type);
+  } else {
+    voteBox.classList.remove("hide");
   }
 
-  if (listing.kind === "ac") {
-    await loadAC();
-  }
+  if (listing?.kind === "ac") loadAC();
 }
 
+// ===== AC =====
 async function loadAC() {
-  const s = await apiGet("/api/orders/" + orderId + "/secret?_=" + Date.now());
+  const s = await apiGet("/api/orders/" + orderId + "/secret");
   if (s.ok && s.secret_txt) {
     acSecret.innerText = s.secret_txt;
     acBox.classList.remove("hide");
   }
-
   warrantyUntil = order.created_at + 3 * 60 * 1000;
   timerBox.classList.remove("hide");
   startTimer();
 }
 
+// ===== TIMER =====
 function startTimer() {
   function tick() {
     const left = warrantyUntil - Date.now();
     if (left <= 0) {
       timer.innerText = "00:00";
-      // hết hạn thì không cho vote nữa (nếu chưa vote)
-      if (!document.body.innerHTML.includes("Bạn đã đánh giá")) voteBox.classList.add("hide");
+      if (!voted) voteBox.classList.add("hide");
       return;
     }
     const s = Math.floor(left / 1000);
-    const mm = String(Math.floor(s / 60)).padStart(2, "0");
-    const ss = String(s % 60).padStart(2, "0");
-    timer.innerText = `${mm}:${ss}`;
+    timer.innerText =
+      String(Math.floor(s / 60)).padStart(2,"0") + ":" +
+      String(s % 60).padStart(2,"0");
     setTimeout(tick, 1000);
   }
   tick();
 }
 
-async function vote(type) {
-  // nếu đã bị replace voteBox -> khỏi cho bấm
-  if (voteBox.innerText.includes("Bạn đã đánh giá")) return;
+// ===== FEEDBACK =====
+function showResult(type) {
+  voteBox.classList.add("hide");
+  reportBox.classList.add("hide");
+  resultBox.classList.remove("hide");
+  resultBox.innerHTML =
+    `<b>✅ Bạn đã đánh giá:</b> ${type === "trust" ? "UY TÍN" : "SCAM"}`;
+}
 
-  if (type === "scam") {
-    const note = prompt("Mô tả lý do báo scam (bắt buộc):");
-    if (!note) return;
-
-    const d = await apiPost("/api/disputes", { order_id: orderId, description: note });
-    if (!d.ok) return alert(d.error || "Không thể gửi báo scam");
-
-    alert("Đã gửi báo scam. Admin sẽ xem xét.");
-    voteBox.innerHTML = `<p class="muted"><b>✅ Bạn đã đánh giá:</b> SCAM</p>`;
-    return;
-  }
-
+async function voteTrust() {
+  if (voted) return;
   const r = await apiPost("/api/orders/" + orderId + "/feedback", { type: "trust" });
-  if (!r.ok) return alert(r.error || "Không thể gửi đánh giá");
+  if (!r.ok) return alert(r.error);
+  voted = true;
+  showResult("trust");
+}
 
-  alert("Cảm ơn bạn đã đánh giá!");
-  voteBox.innerHTML = `<p class="muted"><b>✅ Bạn đã đánh giá:</b> UY TÍN</p>`;
+function openReport() {
+  voteBox.classList.add("hide");
+  reportBox.classList.remove("hide");
+}
+
+function closeReport() {
+  reportBox.classList.add("hide");
+  voteBox.classList.remove("hide");
+}
+
+async function submitReport() {
+  const note = reportText.value.trim();
+  if (!note) return alert("Vui lòng nhập mô tả");
+
+  const r = await apiPost("/api/disputes", {
+    order_id: orderId,
+    description: note
+  });
+
+  if (!r.ok) return alert(r.error);
+  voted = true;
+  showResult("scam");
 }
 
 load();
