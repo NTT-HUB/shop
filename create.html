@@ -104,11 +104,12 @@ async function create() {
     return;
   }
 
-  if (!priceValue || priceValue <= 0) {
-    alert("Giá không hợp lệ");
-    resetBtn();
-    return;
-  }
+ if (!priceValue || priceValue < 20000) {
+  alert("Giá trọn gói tối thiểu là 20.000đ");
+  resetBtn();
+  return;
+}
+
 
   if (kind.value === "product" && qtyValue <= 0) {
     alert("Số lượng phải lớn hơn 0");
