@@ -42,15 +42,16 @@
     </section>
 
     <section class="filters">
-      <form id="searchForm" class="filter-form">
-        <input id="q" name="q" placeholder="Tìm kiếm theo tên / mô tả">
-        <select id="kind" name="kind">
-          <option value="">Tất cả</option>
-          <option value="product">Sản phẩm</option>
-          <option value="ac">Tài khoản (AC)</option>
-        </select>
-        <button type="submit" class="btn">Tìm kiếm</button>
-      </form>
+    <form id="searchForm" class="filter-form">
+  <input id="q" placeholder="Tên sản phẩm / mô tả">
+  <input id="seller" placeholder="Tên người bán">
+  <select id="kind">
+    <option value="">Tất cả</option>
+    <option value="product">Sản phẩm</option>
+    <option value="ac">Tài khoản (AC)</option>
+  </select>
+  <button class="btn">Tìm kiếm</button>
+</form>
     </section>
 
     <section>
@@ -69,7 +70,9 @@
     async function load(params = {}) {
       const query = new URLSearchParams();
       if (params.q) query.set("q", params.q.trim());
-      if (params.kind) query.set("kind", params.kind);
+     if (params.kind) query.set("kind", params.kind);
+     if (params.seller) query.set("seller", params.seller.trim());
+
       const data = await apiGet("/api/listings" + (query.toString() ? "?" + query.toString() : ""));
 
       listEl.innerHTML = "";
@@ -104,7 +107,12 @@
 
     document.getElementById("searchForm").addEventListener("submit", (e) => {
       e.preventDefault();
-      load({ q: q.value, kind: kind.value });
+     load({
+  q: q.value,
+  kind: kind.value,
+  seller: seller.value
+});
+
     });
 
     load();
