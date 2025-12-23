@@ -400,14 +400,21 @@ if (path === "/api/admin/users" && req.method === "GET") {
   if (!admin) return withCors(bad("Unauthorized", 401));
 
   const rows = await env.DB.prepare(`
-    SELECT id, username, status, created_at
-    FROM users
-    ORDER BY created_at DESC
+    SELECT 
+      u.id,
+      u.username,
+      u.status,
+      u.created_at,
+      COALESCE(w.balance_cents, 0) AS balance_cents
+    FROM users u
+    LEFT JOIN wallets w ON w.user_id = u.id
+    ORDER BY u.created_at DESC
     LIMIT 200
   `).all();
 
   return withCors(ok({ users: rows.results || [] }));
 }
+
 
 if (path === "/api/admin/users/ban" && req.method === "POST") {
   const admin = await requireAdmin(req, env);
