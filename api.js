@@ -415,6 +415,29 @@ if (path === "/api/admin/users" && req.method === "GET") {
   return withCors(ok({ users: rows.results || [] }));
 }
 
+// POST /api/admin/users/delete
+if (path === "/api/admin/users/delete" && req.method === "POST") {
+  const admin = await requireAdmin(req, env);
+  if (!admin) return withCors(bad("Unauthorized", 401));
+
+  const body = await readJson(req);
+  if (!body?.user_id) return withCors(bad("Missing user_id"));
+
+  const now = Date.now();
+
+  // 1️⃣ XÓA MỀM USER
+  await env.DB.prepare(
+    "UPDATE users SET status='deleted', updated_at=? WHERE id=?"
+  ).bind(now, body.user_id).run();
+
+  // 2️⃣ ẨN TOÀN BỘ SẢN PHẨM ĐANG BÁN
+  await env.DB.prepare(
+    "UPDATE listings SET status='hidden', updated_at=? WHERE seller_id=? AND status='active'"
+  ).bind(now, body.user_id).run();
+
+  return withCors(ok({ success: true }));
+}
+
 
 if (path === "/api/admin/users/ban" && req.method === "POST") {
   const admin = await requireAdmin(req, env);
