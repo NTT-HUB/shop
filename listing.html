@@ -44,7 +44,12 @@
       <div><b>Giá trọn gói:</b> <span id="price"></span></div>
       <div><b>Số lượng:</b> <span id="qty"></span></div>
       <div><b>Tình trạng:</b> <span id="status"></span></div>
-      <div><b>Người bán:</b> <span id="seller"></span></div>
+
+      <div>
+        <b>Người bán:</b>
+        <a id="sellerLink" href="#" style="font-weight:bold"></a>
+      </div>
+
       <div><b>Uy tín:</b> <span id="rep"></span></div>
     </div>
 
@@ -82,7 +87,10 @@ async function load() {
   desc.innerText = listing.description || "Không có mô tả";
   price.innerText = formatPrice(listing.price_cents);
   qty.innerText = listing.quantity;
-  seller.innerText = listing.seller_username;
+
+  sellerLink.innerText = listing.seller_username;
+  sellerLink.href = "view-profile.html?user=" + encodeURIComponent(listing.seller_username);
+
   rep.innerText = listing.seller_reputation || 0;
 
   if (listing.quantity > 0) {
@@ -101,12 +109,10 @@ async function confirmBuy() {
     "BẠN CÓ CHẮC MUỐN MUA TOÀN BỘ SẢN PHẨM NÀY?\n\n" +
     "• Số lượng: " + listing.quantity + "\n" +
     "• Giá trọn gói: " + formatPrice(listing.price_cents) + "\n\n" +
-    "Sau khi mua, toàn bộ số lượng sẽ thuộc về bạn.\n" +
     "⚠ Giao dịch KHÔNG thể hoàn tác."
   );
 
   if (!ok) return;
-
   buyAll();
 }
 
@@ -127,7 +133,6 @@ async function buyAll() {
   location.href = "/order.html?id=" + res.order_id;
 }
 
-// ===== INIT =====
 load();
 </script>
 
