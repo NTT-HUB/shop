@@ -943,6 +943,24 @@ if (path === "/api/admin/settings" && req.method === "POST") {
   return withCors(ok({ updated: entries.map(([k]) => k), ts: now }));
 }
 
+// GET /api/settings/public
+if (path === "/api/settings/public" && req.method === "GET") {
+  const rows = await env.DB.prepare(
+    "SELECT key, value FROM system_settings WHERE key IN ('site_name','site_tagline')"
+  ).all();
+
+  const map = {};
+  for (const r of rows.results || []) map[r.key] = r.value;
+
+  return withCors(ok({
+    settings: {
+      site_name: map.site_name || "SHOP",
+      site_tagline: map.site_tagline || "Chợ đồ số & tài khoản"
+    }
+  }));
+}
+
+
 // ===== CREATE DEPOSIT =====
 if (path === "/api/deposits/create" && req.method === "POST") {
   const u = await requireAuth(req, env);
