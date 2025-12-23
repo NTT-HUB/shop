@@ -332,37 +332,110 @@ img.qr {
   }
 }
 
-.header{
-  position: sticky; top:0; z-index:50;
-  display:flex; align-items:center; justify-content:space-between;
-  padding:10px 12px; background:#fff; border-bottom:2px solid #000;
+/* ===== HAMBURGER MENU (FIX THEO THEME ĐEN) ===== */
+.site-header{
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  /* dùng style header sẵn có của bạn (header{...}) nên không set nền trắng nữa */
 }
-.header--admin{ background:#111; color:#fff; border-bottom-color:#111; }
-.header--admin a{ color:#fff; }
 
-.logo{ font-weight:800; text-decoration:none; color:#000; }
-.hamburger{
-  font-size:22px; font-weight:800;
-  border:2px solid #000; background:#fff; cursor:pointer;
-  padding:4px 10px; border-radius:8px;
+/* nút 3 gạch theo theme */
+.site-hamburger{
+  width: auto;
+  padding: 8px 12px;
+  margin: 0;
+  border: 2px solid var(--border);
+  background: var(--bg);
+  color: var(--fg);
+  font-weight: 900;
+  font-size: 20px;
+  border-radius: 10px;
+  cursor: pointer;
 }
-.header--admin .hamburger{ border-color:#fff; background:#111; color:#fff; }
 
-.drawer{
-  position: fixed; top:0; right:-320px; height:100vh; width:300px;
-  background:#fff; border-left:2px solid #000;
-  padding:14px; display:flex; flex-direction:column; gap:10px;
-  transition:right .2s ease; z-index:60;
+/* drawer: đóng bằng transform để không bị lộ mép */
+.site-drawer{
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  width: min(320px, 86vw);
+  padding: 14px;
+  background: var(--bg);
+  border-left: 2px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 60;
+
+  transform: translateX(110%);
+  transition: transform .2s ease;
 }
-.header--admin .drawer{ background:#111; border-left-color:#111; }
-.drawer a{ text-decoration:none; color:#000; font-weight:700; padding:8px 10px; border:2px solid #000; border-radius:10px; }
-.header--admin .drawer a{ color:#fff; border-color:#fff; }
 
-.drawer.open{ right:0; }
-
-.overlay{
-  position: fixed; inset:0; background:rgba(0,0,0,.35);
-  opacity:0; pointer-events:none; transition:opacity .2s ease;
-  z-index:55;
+/* link trong drawer */
+.site-drawer a{
+  margin: 0;               /* chặn nav a { margin-left:15px } của bạn */
+  text-decoration: none;
+  font-weight: 800;
+  padding: 10px 12px;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  color: var(--fg);
+  background: transparent;
 }
-.overlay.show{ opacity:1; pointer-events:auto; }
+
+.site-drawer a:hover{
+  background: var(--fg);
+  color: var(--bg);
+  text-decoration: none;
+}
+
+.site-drawer.open{
+  transform: translateX(0);
+}
+
+/* overlay */
+.site-overlay{
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.5);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s ease;
+  z-index: 55;
+}
+
+.site-overlay.show{
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Desktop: nếu bạn muốn vẫn dùng drawer thì giữ nguyên.
+   Nếu muốn desktop hiện menu ngang như cũ -> bật đoạn dưới. */
+/*
+@media (min-width: 900px){
+  .site-hamburger{ display:none; }
+  .site-overlay{ display:none; }
+  .site-drawer{
+    position: static;
+    height: auto;
+    width: auto;
+    padding: 0;
+    border-left: 0;
+    flex-direction: row;
+    transform: none;
+    background: transparent;
+  }
+  .site-drawer a{
+    border: 0;
+    padding: 0;
+    margin-left: 15px;
+  }
+  .site-drawer a:hover{
+    background: transparent;
+    color: var(--fg);
+    text-decoration: underline;
+  }
+}
+*/
