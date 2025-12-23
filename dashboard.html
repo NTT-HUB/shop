@@ -116,7 +116,6 @@ async function loadMyListings() {
         <td class="center">
           <div class="actions">
             <button onclick="viewListing('${i.id}')">Xem</button>
-            <button onclick="hideListing('${i.id}')">Ẩn</button>
             <button onclick="deleteListing('${i.id}')">Xóa</button>
           </div>
         </td>
@@ -128,13 +127,6 @@ async function loadMyListings() {
 /* ===== ACTIONS ===== */
 function viewListing(id) {
   location.href = "/listing.html?id=" + id;
-}
-
-async function hideListing(id) {
-  if (!confirm("Ẩn sản phẩm này khỏi trang mua?")) return;
-  const r = await apiPost(`/api/listings/${id}/hide`, {});
-  if (!r.ok) return alert(r.error);
-  loadMyListings();
 }
 
 async function deleteListing(id) {
