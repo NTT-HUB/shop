@@ -48,11 +48,14 @@ async function load() {
     return;
   }
 
-  // ❗ KHÔNG CÓ DỮ LIỆU
+  // ❗ KHÔNG CÓ GIAO DỊCH
   if (!r.items || r.items.length === 0) {
     empty.hidden = false;
+    rows.innerHTML = "";
     return;
   }
+
+  empty.hidden = true;
 
   rows.innerHTML = r.items.map(w => `
     <tr>
@@ -66,7 +69,5 @@ async function load() {
 
 load();
 </script>
-
-
 </body>
 </html>
