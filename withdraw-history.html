@@ -41,9 +41,15 @@
 <script>
 async function load() {
   const r = await apiGet("/api/my/withdrawals");
-  if (!r.ok) return alert("Chưa đăng nhập");
 
-  if (!r.items.length) {
+  // ❗ CHƯA ĐĂNG NHẬP
+  if (!r.ok) {
+    location.href = "/login.html";
+    return;
+  }
+
+  // ❗ KHÔNG CÓ DỮ LIỆU
+  if (!r.items || r.items.length === 0) {
     empty.hidden = false;
     return;
   }
@@ -53,12 +59,14 @@ async function load() {
       <td>${formatPrice(w.amount_cents)}</td>
       <td>${w.method}</td>
       <td>${w.status}</td>
-      <td>${new Date(w.created_at).toLocaleString()}</td>
+      <td>${new Date(w.created_at).toLocaleString("vi-VN")}</td>
     </tr>
   `).join("");
 }
+
 load();
 </script>
+
 
 </body>
 </html>
