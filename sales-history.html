@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>Lịch sử bán hàng</title>
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <a href="/">SHOP</a>
+    <small>Lịch sử bán hàng</small>
+  </div>
+  <nav>
+    <a href="/dashboard.html">Tài khoản</a>
+  </nav>
+</header>
+
+<main class="container">
+  <div class="box">
+    <h2>Đơn hàng đã bán</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Sản phẩm</th>
+          <th>Người mua</th>
+          <th>Số lượng</th>
+          <th>Tiền nhận</th>
+          <th>Thời gian</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+
+    <p id="empty" class="muted" hidden>Chưa có đơn hàng nào.</p>
+  </div>
+</main>
+
+<script src="assets/app.js"></script>
+<script>
+async function load() {
+  const r = await apiGet("/api/my/sales");
+  if (!r.ok) return alert("Chưa đăng nhập");
+
+  if (!r.items.length) {
+    empty.hidden = false;
+    return;
+  }
+
+  rows.innerHTML = r.items.map(o => `
+    <tr>
+      <td>${o.title}</td>
+      <td>${o.buyer_username}</td>
+      <td>${o.quantity}</td>
+      <td>${formatPrice(o.seller_income_cents)}</td>
+      <td>${new Date(o.created_at).toLocaleString()}</td>
+    </tr>
+  `).join("");
+}
+load();
+</script>
+
+</body>
+</html>
