@@ -413,6 +413,35 @@ if (path === "/api/admin/users/balance" && req.method === "POST") {
   return withCors(ok({ user_id, amount_cents }));
 }
 
+if (path === "/api/admin/users/status" && req.method === "POST") {
+  const admin = await requireAdmin(req, env);
+  if (!admin) return withCors(bad("Unauthorized", 401));
+
+  const { user_id, status } = await readJson(req);
+  if (!user_id || !["active", "banned"].includes(status))
+    return withCors(bad("Invalid input"));
+
+  const now = Date.now();
+
+  // update user
+  await env.DB.prepare(
+    "UPDATE users SET status=?, updated_at=? WHERE id=?"
+  ).bind(status, now, user_id).run();
+
+  // ẨN / HIỆN listing
+  if (status === "banned") {
+    await env.DB.prepare(
+      "UPDATE listings SET status='hidden' WHERE seller_id=? AND status='active'"
+    ).bind(user_id).run();
+  } else {
+    await env.DB.prepare(
+      "UPDATE listings SET status='active' WHERE seller_id=? AND status='hidden'"
+    ).bind(user_id).run();
+  }
+
+  return withCors(ok({ user_id, status }));
+}
+
       // -------- PURCHASE --------
 // POST /api/orders (BUY ALL)
 if (path === "/api/orders" && req.method === "POST") {
