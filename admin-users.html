@@ -13,19 +13,12 @@
     th, td {
       border: 1px solid #fff;
       padding: 6px 8px;
+      white-space: nowrap;
       vertical-align: middle;
     }
     th {
       text-align: left;
       background: #111;
-      white-space: nowrap;
-    }
-    td {
-      white-space: nowrap;
-    }
-    td.balance {
-      white-space: normal;
-      min-width: 120px;
     }
     .banned {
       color: #f87171;
@@ -34,7 +27,6 @@
     .actions {
       display: flex;
       gap: 6px;
-      flex-wrap: wrap;
     }
     .actions button {
       padding: 4px 8px;
@@ -45,16 +37,10 @@
       display: flex;
       gap: 8px;
       align-items: center;
-      flex-wrap: wrap;
     }
     .search-box input {
       max-width: 260px;
       margin: 0;
-    }
-    .hint {
-      color: #aaa;
-      font-size: 12px;
-      margin-top: 6px;
     }
   </style>
 </head>
@@ -62,22 +48,20 @@
 
 <header>
   <div class="brand">
-    <a href="/" id="siteName">SHOP</a>
+   <a href="/" id="siteName">SHOP</a>
     <small>Admin – Quản lý người dùng</small>
   </div>
 </header>
 
 <main class="container">
   <div class="box">
-    <h2>Users (<span id="count">0</span>)</h2>
+    <h2>Users</h2>
 
     <!-- SEARCH -->
     <div class="search-box">
       <input id="q" placeholder="Tìm theo username…">
       <button class="btn" onclick="load()">Tìm</button>
-      <button class="btn" onclick="reloadAll()">Reload</button>
     </div>
-    <div class="hint" id="hint"></div>
 
     <table>
       <thead>
@@ -95,92 +79,57 @@
 
 <script src="assets/app.js"></script>
 <script>
-let cached = [];
-
-function pickBalanceCents(u) {
-  // hỗ trợ nhiều tên field khác nhau để không bị "trống"
-  const candidates = [
-    u.balance_cents,
-    u.wallet_balance_cents,
-    u.wallet_cents,
-    u.balance,
-    u.wallet_balance
-  ];
-  for (const v of candidates) {
-    const n = Number(v);
-    if (Number.isFinite(n)) return n;
-  }
-  return null; // backend không trả
-}
-
-async function reloadAll() {
-  q.value = "";
-  await load(true);
-}
-
-async function load(forceFetch = false) {
+async function load() {
   const keyword = q.value.trim().toLowerCase();
+  const r = await apiGet("/api/admin/users");
+  if (!r.ok) return alert("Unauthorized");
 
-  if (forceFetch || cached.length === 0) {
-    const r = await apiGet("/api/admin/users?_=" + Date.now());
-    if (!r.ok) return alert(r.error || "Unauthorized");
-    cached = r.users || [];
-  }
+  let users = r.users || [];
 
-  let users = cached;
   if (keyword) {
-    users = users.filter(u => (u.username || "").toLowerCase().includes(keyword));
+    users = users.filter(u =>
+      u.username.toLowerCase().includes(keyword)
+    );
   }
 
-  count.innerText = users.length;
-
-  // cảnh báo nếu backend không trả balance_cents
-  const anyHasBalance = users.some(u => pickBalanceCents(u) !== null);
-  hint.textContent = anyHasBalance
-    ? ""
-    : "⚠ API /api/admin/users chưa trả số dư (balance_cents). Trang đang hiển thị 0đ/— để bạn nhận biết.";
-
-  rows.innerHTML = users.map(u => {
-    const bal = pickBalanceCents(u);
-    const balText = (bal === null) ? "—" : formatPrice(bal);
-
-    return `
-      <tr>
-        <td>${u.username || "(no username)"}</td>
-        <td class="${u.status === "banned" ? "banned" : ""}">
-          ${u.status || "unknown"}
-        </td>
-        <td class="balance">${balText}</td>
-        <td>
-          <div class="actions">
-            ${
-              u.status === "active"
-                ? `<button onclick="setStatus('${u.id}','banned')">Ban</button>`
-                : `<button onclick="setStatus('${u.id}','active')">Unban</button>`
-            }
-            <button onclick="adjust('${u.id}', true)">+Tiền</button>
-            <button onclick="adjust('${u.id}', false)">-Tiền</button>
-          </div>
-        </td>
-      </tr>
-    `;
-  }).join("");
+  rows.innerHTML = users.map(u => `
+    <tr>
+      <td>${u.username}</td>
+      <td class="${u.status === "banned" ? "banned" : ""}">
+        ${u.status}
+      </td>
+      <td>${formatPrice(u.balance_cents)}</td>
+      <td>
+        <div class="actions">
+          ${
+            u.status === "active"
+              ? `<button onclick="setStatus('${u.id}','banned')">Ban</button>`
+              : `<button onclick="setStatus('${u.id}','active')">Unban</button>`
+          }
+          <button onclick="adjust('${u.id}', true)">+Tiền</button>
+          <button onclick="adjust('${u.id}', false)">-Tiền</button>
+        </div>
+      </td>
+    </tr>
+  `).join("");
 }
 
 async function setStatus(userId, status) {
   if (!confirm(`${status === "banned" ? "BAN" : "UNBAN"} user này?`)) return;
 
-  const r = await apiPost("/api/admin/users/status", { user_id: userId, status });
-  if (!r.ok) return alert(r.error || "Failed");
-
-  await load(true);
+  const r = await apiPost("/api/admin/users/status", {
+    user_id: userId,
+    status
+  });
+  if (!r.ok) return alert(r.error);
+  load();
 }
 
 async function adjust(userId, add) {
   const amount = prompt(add ? "Nhập số tiền CỘNG (VNĐ):" : "Nhập số tiền TRỪ (VNĐ):");
   if (!amount) return;
 
-  const vnd = Number(String(amount).replace(/\D/g, ""));
+  const vnd = Number(amount.replace(/[^0-9]/g,""));
   if (!vnd) return alert("Sai số tiền");
 
   const note = prompt("Ghi chú (tuỳ chọn):") || "";
@@ -191,12 +140,11 @@ async function adjust(userId, add) {
     note
   });
 
-  if (!r.ok) return alert(r.error || "Failed");
-
-  await load(true);
+  if (!r.ok) return alert(r.error);
+  load();
 }
 
-load(true);
+load();
 </script>
 
 </body>
