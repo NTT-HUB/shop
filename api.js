@@ -242,66 +242,128 @@ if (path === "/api/my/orders" && req.method === "GET") {
         return withCors(ok({ items: rows.results ?? [], limit, offset }));
       }
 
-      if (path === "/api/listings" && req.method === "POST") {
-        const u = await requireAuth(req, env);
-        if (!u) return withCors(bad("Unauthorized", 401));
+      async function computeQuota(env, userId) {
+  // lấy uy tín + role
+  const u = await env.DB.prepare(
+    "SELECT reputation, role FROM users WHERE id=?"
+  ).bind(userId).first();
 
-        const seller = await env.DB.prepare("SELECT status FROM users WHERE id=?").bind(u.userId).first();
-        if (!seller || seller.status !== "active") return withCors(bad("Account banned", 403));
+  if (!u) return 0;
 
-        const body = await readJson(req);
-        if (!body) return withCors(bad("Invalid JSON"));
+  // admin không giới hạn
+  if (u.role === "admin") return 999999;
 
-        // ảnh bỏ qua (no image) - vẫn giữ field image_key để sau dùng R2 nếu muốn
-        const { kind, title, description, price_cents, quantity, contact_link, ac_secret_txt } = body;
+  // theo uy tín
+  const rep = Number(u.reputation || 0);
 
-        if (!kind || !title || price_cents == null) return withCors(bad("Missing fields"));
-        if (kind !== "product" && kind !== "ac") return withCors(bad("Invalid kind"));
-        if (Number(price_cents) < 0) return withCors(bad("Invalid price"));
+  if (rep >= 100) return 20;
+  if (rep >= 50)  return 15;
+  if (rep >= 10)  return 10;
 
-        const qty = quantity == null ? 1 : Number(quantity);
-        if (!Number.isFinite(qty) || qty < 0) return withCors(bad("Invalid quantity"));
+  // user mới
+  return 5;
+}
 
-        const quota = await computeQuota(env, u.userId);
-        const used = await env.DB.prepare("SELECT COUNT(*) as c FROM listings WHERE seller_id=? AND status='active'")
-          .bind(u.userId)
-          .first();
 
-        if ((used?.c ?? 0) >= quota) return withCors(bad(`Reached listing limit (${quota})`, 403));
+  if (path === "/api/listings" && req.method === "POST") {
+  const u = await requireAuth(req, env);
+  if (!u) return withCors(bad("Unauthorized", 401));
 
-        const now = Date.now();
-        const id = crypto.randomUUID();
+  // 🔒 kiểm tra trạng thái user
+  const seller = await env.DB
+    .prepare("SELECT status FROM users WHERE id=?")
+    .bind(u.userId)
+    .first();
 
-        await env.DB.prepare(
-          `INSERT INTO listings (id, seller_id, kind, title, description, price_cents, quantity, image_key, contact_link, status, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, 'active', ?, ?)`
-        )
-          .bind(
-            id,
-            u.userId,
-            kind,
-            String(title),
-            description ? String(description) : null,
-            Number(price_cents),
-            qty,
-            contact_link ? String(contact_link) : null,
-            now,
-            now
-          )
-          .run();
+  if (!seller || seller.status !== "active")
+    return withCors(bad("Account banned", 403));
 
-        if (kind === "ac") {
-          if (!ac_secret_txt) return withCors(bad("Missing ac_secret_txt for kind=ac"));
-          // MVP: lưu plaintext trong encrypted_blob (sau đổi AES-GCM)
-          await env.DB.prepare(
-            `INSERT INTO listing_secrets (listing_id, encrypted_blob, created_at) VALUES (?, ?, ?)`
-          )
-            .bind(id, String(ac_secret_txt), now)
-            .run();
-        }
+  const body = await readJson(req);
+  if (!body) return withCors(bad("Invalid JSON"));
 
-        return withCors(ok({ listing_id: id }));
-      }
+  const {
+    kind,
+    title,
+    description,
+    price_cents,
+    quantity,
+    contact_link,
+    ac_secret_txt
+  } = body;
+
+  // ===== VALIDATE =====
+  if (!kind || !title || price_cents == null)
+    return withCors(bad("Missing fields"));
+
+  if (!["product", "ac"].includes(kind))
+    return withCors(bad("Invalid kind"));
+
+  if (!Number.isFinite(Number(price_cents)) || Number(price_cents) < 20000)
+    return withCors(bad("Price must be >= 20.000đ"));
+
+  const qty = quantity == null ? 1 : Number(quantity);
+  if (!Number.isFinite(qty) || qty <= 0)
+    return withCors(bad("Invalid quantity"));
+
+  if (kind === "ac" && !ac_secret_txt)
+    return withCors(bad("Missing ac_secret_txt for AC"));
+
+  // ===== QUOTA =====
+  const quota = await computeQuota(env, u.userId);
+
+  const used = await env.DB.prepare(
+    "SELECT COUNT(*) as c FROM listings WHERE seller_id=? AND status='active'"
+  )
+    .bind(u.userId)
+    .first();
+
+  if ((used?.c ?? 0) >= quota)
+    return withCors(
+      bad(`Reached listing limit (${quota} active listings)`, 403)
+    );
+
+  // ===== INSERT LISTING =====
+  const now = Date.now();
+  const id = crypto.randomUUID();
+
+  await env.DB.prepare(
+    `INSERT INTO listings
+     (id, seller_id, kind, title, description, price_cents, quantity,
+      image_key, contact_link, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, 'active', ?, ?)`
+  )
+    .bind(
+      id,
+      u.userId,
+      kind,
+      String(title).slice(0, 200),
+      description ? String(description).slice(0, 2000) : null,
+      Number(price_cents),
+      kind === "ac" ? 1 : qty,
+      contact_link ? String(contact_link).slice(0, 500) : null,
+      now,
+      now
+    )
+    .run();
+
+  // ===== AC SECRET =====
+  if (kind === "ac") {
+    await env.DB.prepare(
+      `INSERT INTO listing_secrets
+       (listing_id, encrypted_blob, created_at)
+       VALUES (?, ?, ?)`
+    )
+      .bind(id, String(ac_secret_txt), now)
+      .run();
+  }
+
+  return withCors(ok({
+    listing_id: id,
+    quota,
+    used: (used?.c ?? 0) + 1
+  }));
+}
+
 
      if (path.startsWith("/api/listings/") && req.method === "GET") {
   const id = path.split("/").pop();
