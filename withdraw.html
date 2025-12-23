@@ -29,7 +29,7 @@
 
     <div class="group">
       <label>Số tiền (VNĐ)</label>
-      <input id="amount" type="number" placeholder="Ví dụ: 100000">
+      <input id="amount" inputmode="numeric" placeholder="Ví dụ: 100.000">
     </div>
 
     <div class="group">
@@ -114,6 +114,23 @@ async function withdraw() {
 }
 
 switchMethod();
+
+  /* ===== FORMAT TIỀN ===== */
+function onlyDigits(s) {
+  return String(s || "").replace(/\D/g, "");
+}
+
+function formatMoney(v) {
+  const n = onlyDigits(v);
+  if (!n) return "";
+  return n.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+// format khi gõ
+amount.addEventListener("input", () => {
+  amount.value = formatMoney(amount.value);
+});
+
 </script>
 
 </body>
