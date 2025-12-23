@@ -1363,17 +1363,77 @@ if (path === "/api/webhooks/card" && req.method === "POST") {
 }
 
 
-      // GET /api/orders/:id
-      if (path.startsWith("/api/orders/") && req.method === "GET" && !path.endsWith("/secret") && !path.endsWith("/feedback")) {
-        const u = await requireAuth(req, env);
-        if (!u) return withCors(bad("Unauthorized", 401));
+    // GET /api/orders/:id
+if (
+  path.startsWith("/api/orders/") &&
+  req.method === "GET" &&
+  !path.endsWith("/secret") &&
+  !path.endsWith("/feedback")
+) {
+  const u = await requireAuth(req, env);
+  if (!u) return withCors(bad("Unauthorized", 401));
 
-        const orderId = path.split("/").pop();
-        const order = await env.DB.prepare("SELECT * FROM orders WHERE id=?").bind(orderId).first();
-        if (!order) return withCors(bad("Not found", 404));
-        if (order.buyer_id !== u.userId && order.seller_id !== u.userId && u.role !== "admin") {
-          return withCors(bad("Forbidden", 403));
-        }
+  const orderId = path.split("/").pop();
+
+  // ✅ LẤY ORDER + LISTING + SELLER (kể cả listing sold_out/ẩn)
+  const row = await env.DB.prepare(`
+    SELECT
+      o.*,
+      l.title AS listing_title,
+      l.kind AS listing_kind,
+      l.contact_link AS listing_contact_link,
+      s.username AS seller_username,
+      s.reputation AS seller_reputation
+    FROM orders o
+    JOIN listings l ON l.id = o.listing_id
+    JOIN users s ON s.id = o.seller_id
+    WHERE o.id = ?
+    LIMIT 1
+  `).bind(orderId).first();
+
+  if (!row) return withCors(bad("Not found", 404));
+
+  // quyền xem
+  if (row.buyer_id !== u.userId && row.seller_id !== u.userId && u.role !== "admin") {
+    return withCors(bad("Forbidden", 403));
+  }
+
+  // ✅ CHECK ĐÃ FEEDBACK CHƯA (buyer đánh giá)
+  const fb = await env.DB.prepare(`
+    SELECT type, created_at
+    FROM feedback
+    WHERE order_id = ? AND user_id = ?
+    LIMIT 1
+  `).bind(orderId, row.buyer_id).first();
+
+  const res = ok({
+    order: {
+      id: row.id,
+      buyer_id: row.buyer_id,
+      seller_id: row.seller_id,
+      listing_id: row.listing_id,
+      unit_price_cents: row.unit_price_cents,
+      quantity: row.quantity,
+      subtotal_cents: row.subtotal_cents,
+      platform_fee_cents: row.platform_fee_cents,
+      seller_income_cents: row.seller_income_cents,
+      status: row.status,
+      created_at: row.created_at
+    },
+    listing: {
+      title: row.listing_title,
+      kind: row.listing_kind,
+      contact_link: row.listing_contact_link,
+      seller_username: row.seller_username,
+      seller_reputation: row.seller_reputation
+    },
+    feedback: fb ? { type: fb.type, created_at: fb.created_at } : null
+  });
+
+  res.headers.set("Cache-Control", "no-store");
+  return withCors(res);
+}
+
 
 // ===== AUTO TRUST FOR AC AFTER 3 MINUTES =====
 const listingInfo = await env.DB.prepare(
@@ -1435,45 +1495,37 @@ if (listingInfo?.kind === "ac") {
       }
 
       // POST /api/orders/:id/feedback
-      if (path.startsWith("/api/orders/") && path.endsWith("/feedback") && req.method === "POST") {
-        const u = await requireAuth(req, env);
-        if (!u) return withCors(bad("Unauthorized", 401));
+if (path.endsWith("/feedback") && req.method === "POST") {
+  const u = await requireAuth(req, env);
+  if (!u) return withCors(bad("Unauthorized", 401));
 
-        const parts = path.split("/");
-        const orderId = parts[3];
+  const orderId = path.split("/").slice(-2)[0];
 
-        const body = await readJson(req);
-        if (!body) return withCors(bad("Invalid JSON"));
+  const order = await env.DB.prepare("SELECT * FROM orders WHERE id=?").bind(orderId).first();
+  if (!order) return withCors(bad("Order not found", 404));
+  if (order.buyer_id !== u.userId) return withCors(bad("Only buyer can feedback", 403));
 
-        const { type, note } = body;
-        if (type !== "trust" && type !== "scam") return withCors(bad("Invalid type"));
+  // ✅ CHẶN ĐÁNH GIÁ LẠI
+  const existed = await env.DB.prepare(
+    "SELECT id FROM feedback WHERE order_id=? AND user_id=? LIMIT 1"
+  ).bind(orderId, u.userId).first();
 
-        const order = await env.DB.prepare("SELECT * FROM orders WHERE id=?").bind(orderId).first();
-        if (!order) return withCors(bad("Not found", 404));
-        if (order.buyer_id !== u.userId) return withCors(bad("Forbidden", 403));
+  if (existed) return withCors(bad("You already sent feedback for this order", 409));
 
-        try {
-          await env.DB.prepare(
-            `INSERT INTO feedback (order_id, buyer_id, seller_id, type, note, created_at)
-             VALUES (?, ?, ?, ?, ?, ?)`
-          )
-            .bind(orderId, u.userId, order.seller_id, type, note ? String(note) : null, Date.now())
-            .run();
-        } catch (e) {
-          console.error("FEEDBACK ERROR:", e);
-          return withCors(bad("Already feedbacked", 409));
-        }
+  const body = await readJson(req);
+  const type = String(body?.type || "");
+  if (!["trust", "scam"].includes(type)) return withCors(bad("Invalid type", 400));
 
-        if (type === "trust") {
-          await env.DB.prepare("UPDATE users SET reputation = reputation + 1, updated_at=? WHERE id=?")
-            .bind(Date.now(), order.seller_id)
-            .run();
-        } else {
-          await env.DB.prepare("UPDATE orders SET status='disputed' WHERE id=?").bind(orderId).run();
-        }
+  const now = Date.now();
 
-        return withCors(ok());
-      }
+  await env.DB.prepare(`
+    INSERT INTO feedback (id, order_id, user_id, type, created_at)
+    VALUES (?, ?, ?, ?, ?)
+  `).bind(crypto.randomUUID(), orderId, u.userId, type, now).run();
+
+  return withCors(ok({ ok: true }));
+}
+
 
       // ===== ADMIN DECIDE WITHDRAW =====
 if (path.startsWith("/api/admin/withdrawals/") && path.endsWith("/decision") && req.method === "POST") {
