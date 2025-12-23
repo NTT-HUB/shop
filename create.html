@@ -1,106 +1,156 @@
 <!DOCTYPE html>
-<html>
+<html lang="vi">
 <head>
   <meta charset="utf-8">
   <title>Đăng bán</title>
   <link rel="stylesheet" href="assets/style.css">
+  <style>
+    .hide { display: none; }
+  </style>
 </head>
 <body>
-  <header>
-    <div class="brand">
-      <a href="/">SHOP</a>
-      <small>Đăng sản phẩm</small>
-    </div>
-    <nav>
-      <a href="/dashboard.html">Tài khoản</a>
-      <a href="/login.html">Đăng nhập</a>
-    </nav>
-  </header>
 
-  <main class="container">
-    <div class="box">
-      <h2>Thông tin sản phẩm</h2>
-      <label>Loại</label>
-      <select id="kind">
-        <option value="product">Sản phẩm</option>
-        <option value="ac">Tài khoản (AC)</option>
-      </select>
+<header>
+  <div class="brand">
+    <a href="/">SHOP</a>
+    <small>Đăng sản phẩm</small>
+  </div>
+  <nav>
+    <a href="/dashboard.html">Tài khoản</a>
+  </nav>
+</header>
 
-      <label>Tên hiển thị</label>
-      <input id="title" placeholder="VD: Acc game VIP, Áo hoodie local brand">
+<main class="container">
+  <div class="box">
+    <h2>Thông tin sản phẩm</h2>
 
-      <label>Giá (VND)</label>
-      <input id="price" inputmode="numeric" placeholder="Nhập số VND, ví dụ 150000">
+    <!-- LOẠI -->
+    <label>Loại</label>
+    <select id="kind" onchange="toggleKind()">
+      <option value="product">Sản phẩm</option>
+      <option value="ac">Tài khoản (AC)</option>
+    </select>
 
+    <!-- TÊN -->
+    <label>Tên hiển thị</label>
+    <input id="title" placeholder="VD: Acc game VIP, Áo hoodie local brand">
+
+    <!-- GIÁ -->
+    <label>Giá trọn gói (VNĐ)</label>
+    <input id="price" inputmode="numeric" placeholder="VD: 1.500.000">
+
+    <!-- SỐ LƯỢNG -->
+    <div id="qtyBox">
       <label>Số lượng</label>
-      <input id="qty" inputmode="numeric" placeholder="Mặc định 1 nếu để trống">
-
-      <label>Link liên hệ</label>
-      <input id="contact" placeholder="Zalo/Telegram/Website...">
-
-      <label>Mô tả</label>
-      <textarea id="description" placeholder="Điểm nổi bật, điều kiện bảo hành..."></textarea>
-
-      <label>Nội dung AC (chỉ cho loại Tài khoản)</label>
-      <textarea id="secret" placeholder="User/pass, mã backup... sẽ hiển thị cho người mua sau thanh toán"></textarea>
-
-      <div class="muted">Lưu ý: bạn cần đăng nhập trước khi đăng bán.</div>
-      <button id="submitBtn" onclick="create()">Đăng sản phẩm</button>
+      <input id="qty" inputmode="numeric" placeholder="VD: 10">
     </div>
-  </main>
 
-  <script src="assets/app.js"></script>
-  <script>
-    const submitBtn = document.getElementById("submitBtn");
+    <!-- LIÊN HỆ -->
+    <label>Link liên hệ</label>
+    <input id="contact" placeholder="Zalo / Telegram / Website">
 
-    async function create() {
-      submitBtn.disabled = true;
-      submitBtn.innerText = "Đang xử lý...";
+    <!-- MÔ TẢ -->
+    <label>Mô tả</label>
+    <textarea id="description" placeholder="Điểm nổi bật, điều kiện bảo hành..."></textarea>
 
-      const priceValue = sanitizeNumberInput(price.value);
-      const qtyValue = sanitizeNumberInput(qty.value || 1);
+    <!-- AC SECRET -->
+    <div id="acBox" class="hide">
+      <label>Nội dung AC (chỉ hiển thị cho người mua)</label>
+      <textarea id="secret" rows="5"
+        placeholder="Username: xxx
+Password: yyy
+Ghi chú: chưa đổi mail"></textarea>
+      <p class="muted">
+        ⚠ Nội dung này chỉ hiển thị cho người mua sau khi thanh toán thành công
+      </p>
+    </div>
 
-      if (!title.value.trim()) {
-        alert("Vui lòng nhập tên sản phẩm");
-        submitBtn.disabled = false;
-        submitBtn.innerText = "Đăng sản phẩm";
-        return;
-      }
+    <button id="submitBtn" class="btn primary block" onclick="create()">Đăng sản phẩm</button>
+  </div>
+</main>
 
-      if (priceValue <= 0) {
-        alert("Giá phải lớn hơn 0");
-        submitBtn.disabled = false;
-        submitBtn.innerText = "Đăng sản phẩm";
-        return;
-      }
+<script src="assets/app.js"></script>
+<script>
+const priceInput = document.getElementById("price");
 
-      if (qtyValue <= 0) {
-        alert("Số lượng phải lớn hơn 0");
-        submitBtn.disabled = false;
-        submitBtn.innerText = "Đăng sản phẩm";
-        return;
-      }
+// ===== TOGGLE FORM =====
+function toggleKind() {
+  const isAC = kind.value === "ac";
+  acBox.classList.toggle("hide", !isAC);
+  qtyBox.classList.toggle("hide", isAC); // AC thường bán 1 lần
+}
 
-      const payload = {
-        kind: kind.value,
-        title: title.value.trim(),
-        description: description.value.trim(),
-        price_cents: Math.round(priceValue * 100),
-        quantity: Math.max(1, Math.floor(qtyValue || 1)),
-        contact_link: contact.value.trim(),
-        ac_secret_txt: secret.value.trim()
-      };
+// ===== FORMAT GIÁ TIỀN =====
+priceInput.addEventListener("input", () => {
+  const raw = priceInput.value.replace(/\D/g, "");
+  if (!raw) {
+    priceInput.value = "";
+    return;
+  }
+  priceInput.value = raw.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+});
 
-      const res = await apiPost("/api/listings", payload);
-      if (res.ok) {
-        alert("Đăng bán thành công");
-        location.href = "dashboard.html";
-      } else {
-        alert(res.error || "Không thể đăng bán, vui lòng thử lại");
-        submitBtn.disabled = false;
-        submitBtn.innerText = "Đăng sản phẩm";
-      }
-    }
-  </script>
+// ===== CREATE =====
+async function create() {
+  submitBtn.disabled = true;
+  submitBtn.innerText = "Đang xử lý...";
+
+  const priceValue = Number(price.value.replace(/\D/g, ""));
+  const qtyValue = Number(qty.value || 1);
+
+  if (!title.value.trim()) {
+    alert("Vui lòng nhập tên sản phẩm");
+    resetBtn();
+    return;
+  }
+
+  if (!priceValue || priceValue <= 0) {
+    alert("Giá không hợp lệ");
+    resetBtn();
+    return;
+  }
+
+  if (kind.value === "product" && qtyValue <= 0) {
+    alert("Số lượng phải lớn hơn 0");
+    resetBtn();
+    return;
+  }
+
+  if (kind.value === "ac" && !secret.value.trim()) {
+    alert("Vui lòng nhập nội dung AC");
+    resetBtn();
+    return;
+  }
+
+  const payload = {
+    kind: kind.value,
+    title: title.value.trim(),
+    description: description.value.trim(),
+    price_cents: priceValue * 100,
+    quantity: kind.value === "ac" ? 1 : Math.max(1, qtyValue),
+    contact_link: contact.value.trim(),
+    ac_secret_txt: secret.value.trim()
+  };
+
+  const res = await apiPost("/api/listings", payload);
+
+  if (res.ok) {
+    alert("Đăng bán thành công");
+    location.href = "dashboard.html";
+  } else {
+    alert(res.error || "Không thể đăng bán");
+    resetBtn();
+  }
+}
+
+function resetBtn() {
+  submitBtn.disabled = false;
+  submitBtn.innerText = "Đăng sản phẩm";
+}
+
+// INIT
+toggleKind();
+</script>
+
 </body>
 </html>
