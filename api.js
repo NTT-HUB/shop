@@ -1493,36 +1493,50 @@ if (
         return withCors(ok({ secret_txt: secret.encrypted_blob }));
       }
 
-      // POST /api/orders/:id/feedback
-if (path.endsWith("/feedback") && req.method === "POST") {
-  const u = await requireAuth(req, env);
-  if (!u) return withCors(bad("Unauthorized", 401));
+// POST /api/orders/:id/feedback
+{
+  const m = path.match(/^\/api\/orders\/([0-9a-f-]{36})\/feedback$/i);
+  if (m && req.method === "POST") {
+    const u = await requireAuth(req, env);
+    if (!u) return withCors(bad("Unauthorized", 401));
 
-  const orderId = path.split("/").slice(-2)[0];
+    const orderId = m[1];
 
-  const order = await env.DB.prepare("SELECT * FROM orders WHERE id=?").bind(orderId).first();
-  if (!order) return withCors(bad("Order not found", 404));
-  if (order.buyer_id !== u.userId) return withCors(bad("Only buyer can feedback", 403));
+    const order = await env.DB.prepare("SELECT * FROM orders WHERE id=?")
+      .bind(orderId)
+      .first();
 
-  // ✅ CHẶN ĐÁNH GIÁ LẠI
-  const existed = await env.DB.prepare(
-    "SELECT id FROM feedback WHERE order_id=? AND user_id=? LIMIT 1"
-  ).bind(orderId, u.userId).first();
+    if (!order) return withCors(bad("Not found", 404));
+    if (order.buyer_id !== u.userId && u.role !== "admin")
+      return withCors(bad("Forbidden", 403));
 
-  if (existed) return withCors(bad("You already sent feedback for this order", 409));
+    // chặn đánh giá lại
+    const existed = await env.DB.prepare(
+      "SELECT type FROM feedback WHERE order_id=? LIMIT 1"
+    ).bind(orderId).first();
 
-  const body = await readJson(req);
-  const type = String(body?.type || "");
-  if (!["trust", "scam"].includes(type)) return withCors(bad("Invalid type", 400));
+    if (existed) return withCors(ok({ already: true, type: existed.type }));
 
-  const now = Date.now();
+    const body = await readJson(req);
+    const type = String(body?.type || "");
+    if (!["trust", "scam"].includes(type)) return withCors(bad("Invalid type"));
 
-  await env.DB.prepare(`
-    INSERT INTO feedback (id, order_id, user_id, type, created_at)
-    VALUES (?, ?, ?, ?, ?)
-  `).bind(crypto.randomUUID(), orderId, u.userId, type, now).run();
+    const now = Date.now();
 
-  return withCors(ok({ ok: true }));
+    await env.DB.prepare(`
+      INSERT INTO feedback (order_id, buyer_id, seller_id, type, note, created_at)
+      VALUES (?, ?, ?, ?, NULL, ?)
+    `).bind(orderId, order.buyer_id, order.seller_id, type, now).run();
+
+    // cộng uy tín nếu trust
+    if (type === "trust") {
+      await env.DB.prepare(
+        "UPDATE users SET reputation = reputation + 1, updated_at=? WHERE id=?"
+      ).bind(now, order.seller_id).run();
+    }
+
+    return withCors(ok({ ok: true }));
+  }
 }
 
 
