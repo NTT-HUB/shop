@@ -1363,8 +1363,7 @@ if (path === "/api/webhooks/card" && req.method === "POST") {
 }
 
 
-    // GET /api/orders/:id
-// ✅ GET /api/orders/:id – FULL
+ // GET /api/orders/:id
 if (
   path.startsWith("/api/orders/") &&
   req.method === "GET" &&
@@ -1376,6 +1375,7 @@ if (
 
   const orderId = path.split("/").pop();
 
+  // LẤY ORDER + LISTING + SELLER (kể cả sold_out)
   const row = await env.DB.prepare(`
     SELECT
       o.*,
@@ -1393,10 +1393,16 @@ if (
 
   if (!row) return withCors(bad("Not found", 404));
 
-  if (row.buyer_id !== u.userId && row.seller_id !== u.userId && u.role !== "admin") {
+  // check quyền
+  if (
+    row.buyer_id !== u.userId &&
+    row.seller_id !== u.userId &&
+    u.role !== "admin"
+  ) {
     return withCors(bad("Forbidden", 403));
   }
 
+  // ===== CHECK FEEDBACK =====
   const fb = await env.DB.prepare(`
     SELECT type, created_at
     FROM feedback
@@ -1404,6 +1410,29 @@ if (
     LIMIT 1
   `).bind(orderId, row.buyer_id).first();
 
+  // ===== AUTO TRUST CHO AC SAU 3 PHÚT =====
+  if (row.listing_kind === "ac" && row.status === "paid") {
+    const deadline = row.created_at + 3 * 60 * 1000;
+
+    if (Date.now() > deadline && !fb) {
+      await env.DB.prepare(`
+        INSERT INTO feedback (order_id, buyer_id, seller_id, type, note, created_at)
+        VALUES (?, ?, ?, 'trust', 'Auto trust (AC warranty expired)', ?)
+      `).bind(
+        row.id,
+        row.buyer_id,
+        row.seller_id,
+        Date.now()
+      ).run().catch(() => {});
+
+      await env.DB.prepare(`
+        UPDATE users SET reputation = reputation + 1, updated_at=?
+        WHERE id=?
+      `).bind(Date.now(), row.seller_id).run().catch(() => {});
+    }
+  }
+
+  // ===== RESPONSE =====
   const res = ok({
     order: {
       id: row.id,
@@ -1432,41 +1461,6 @@ if (
   return withCors(res);
 }
 
-
-// ===== AUTO TRUST FOR AC AFTER 3 MINUTES =====
-const listingInfo = await env.DB.prepare(
-  "SELECT kind FROM listings WHERE id=?"
-).bind(order.listing_id).first();
-
-if (listingInfo?.kind === "ac") {
-  const deadline = order.created_at + 3 * 60 * 1000;
-
-  if (Date.now() > deadline && order.status === "paid") {
-    const fb = await env.DB.prepare(
-      "SELECT order_id FROM feedback WHERE order_id=?"
-    ).bind(order.id).first();
-
-    if (!fb) {
-      // auto trust
-      await env.DB.prepare(
-        `INSERT INTO feedback (order_id, buyer_id, seller_id, type, note, created_at)
-         VALUES (?, ?, ?, 'trust', 'Auto trust (AC warranty expired)', ?)`
-      ).bind(
-        order.id,
-        order.buyer_id,
-        order.seller_id,
-        Date.now()
-      ).run().catch(() => {});
-
-      await env.DB.prepare(
-        "UPDATE users SET reputation = reputation + 1, updated_at=? WHERE id=?"
-      ).bind(Date.now(), order.seller_id).run().catch(() => {});
-    }
-  }
-}
-
-        return withCors(ok({ order }));
-      }
 
       // GET /api/orders/:id/secret
       if (path.startsWith("/api/orders/") && path.endsWith("/secret") && req.method === "GET") {
