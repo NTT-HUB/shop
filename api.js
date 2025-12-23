@@ -878,20 +878,26 @@ if (path === "/api/admin/settings" && req.method === "GET") {
 
   return withCors(ok({
     settings: {
-      // ===== SITE =====
+      /* ===== SITE ===== */
       site_name: map.site_name || "SHOP",
       site_tagline: map.site_tagline || "Chợ đồ số",
 
-      // ===== PHÍ =====
+      /* ===== PHÍ ===== */
       bank_fee_percent: Number(map.bank_fee_percent || "0"),
       card_fee_percent: Number(map.card_fee_percent || "0"),
 
-      // ===== BANK (WEB2M) =====
-      web2m_token: map.web2m_token || "",
-      web2m_bank_account: map.web2m_bank_account || "",
-      web2m_prefix: map.web2m_prefix || "NAP",
+      /* ===== BANK ===== */
+      bank_name: map.bank_name || "Ngân hàng",
+      bank_account_name: map.bank_account_name || "",
+      bank_account_number:
+        map.web2m_bank_account || map.bank_account_number || "",
+      bank_transfer_prefix:
+        map.web2m_prefix || map.bank_transfer_prefix || "NAP",
 
-      // ===== CARD =====
+      /* ===== WEB2M ===== */
+      web2m_token: map.web2m_token || "",
+
+      /* ===== CARD ===== */
       card_provider: map.card_provider || "thesieure",
       card_api_key: map.card_api_key || "",
       card_partner_id: map.card_partner_id || "",
@@ -899,6 +905,7 @@ if (path === "/api/admin/settings" && req.method === "GET") {
     }
   }));
 }
+
 
 
 // ===== ADMIN UPDATE SETTINGS =====
@@ -910,14 +917,25 @@ if (path === "/api/admin/settings" && req.method === "POST") {
   if (!body) return withCors(bad("Invalid JSON"));
 
   // chỉ cho update whitelist key
- const allow = new Set([
+const allow = new Set([
+  // ===== SITE =====
   "site_name",
-  "site_tagline",      // 👈 THÊM
+  "site_tagline",
+
+  // ===== FEE =====
   "bank_fee_percent",
   "card_fee_percent",
+
+  // ===== BANK INFO (HIỂN THỊ) =====
+  "bank_name",              // 👈 TÊN NGÂN HÀNG
+  "bank_account_name",      // 👈 CHỦ TÀI KHOẢN
+
+  // ===== WEB2M =====
   "web2m_token",
-  "web2m_bank_account",
+  "web2m_bank_account",     // 👈 SỐ TÀI KHOẢN
   "web2m_prefix",
+
+  // ===== CARD =====
   "card_provider",
   "card_api_key",
   "card_partner_id",
