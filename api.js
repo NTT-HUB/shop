@@ -646,32 +646,33 @@ if (path === "/api/my/withdrawals" && req.method === "GET") {
   if (!u) return withCors(bad("Unauthorized", 401));
 
   try {
-    // ✅ dùng SELECT * LIMIT 1 để dò tên cột an toàn (không crash nếu bảng trống)
-    // nhưng D1 không có DESCRIBE, nên cách tốt nhất là viết query theo schema thật.
-    // Nếu bạn chưa chắc schema, dùng alias theo các tên phổ biến.
-
     const rows = await env.DB.prepare(`
       SELECT
         id,
-        -- 3 tên cột phổ biến: amount_cents / amount / amount_vnd
-        COALESCE(amount_cents, amount, amount_vnd) AS amount_cents,
+        amount,        -- ✅ CỘT ĐÚNG
         method,
         status,
-        COALESCE(created_at, created, created_time) AS created_at
+        created_at
       FROM withdrawals
       WHERE user_id=?
-      ORDER BY COALESCE(created_at, created, created_time) DESC
+      ORDER BY created_at DESC
       LIMIT 100
     `).bind(u.userId).all();
 
-    const res = ok({ items: rows.results || [] });
+    // chuẩn hoá cho frontend dùng formatPrice
+    const items = (rows.results || []).map(w => ({
+      id: w.id,
+      amount_cents: w.amount * 100, // ✅ convert sang cents
+      method: w.method,
+      status: w.status,
+      created_at: w.created_at
+    }));
+
+    const res = ok({ items });
     res.headers.set("Cache-Control", "no-store");
     return withCors(res);
   } catch (e) {
-    // ✅ trả lỗi rõ để bạn debug ngay
-    const res = bad("Withdrawals SQL error: " + e.message, 500);
-    res.headers.set("Cache-Control", "no-store");
-    return withCors(res);
+    return withCors(bad("Withdrawals SQL error: " + e.message, 500));
   }
 }
 
