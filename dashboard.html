@@ -1,47 +1,165 @@
 <!DOCTYPE html>
-<html>
+<html lang="vi">
 <head>
   <meta charset="utf-8">
   <title>Dashboard</title>
   <link rel="stylesheet" href="assets/style.css">
+  <style>
+    table {
+      width:100%;
+      border-collapse:collapse;
+      margin-top:10px;
+      font-size:14px;
+    }
+    th, td {
+      border:1px solid #000;
+      padding:6px;
+      vertical-align:middle;
+    }
+    th {
+      background:#111;
+      color:#fff;
+      text-align:left;
+    }
+    .actions {
+      display:flex;
+      gap:6px;
+    }
+    .actions button {
+      padding:4px 6px;
+      font-size:12px;
+      cursor:pointer;
+    }
+    .right { text-align:right; }
+    .center { text-align:center; }
+    .muted-sm { color:#777; font-size:12px; }
+  </style>
 </head>
 <body>
-  <header>
-    <div class="brand">
-      <a href="/">SHOP</a>
-      <small>Tài khoản của bạn</small>
-    </div>
-    <nav>
-      <a href="create.html">Đăng bán</a>
-      <a href="#" onclick="logout()">Đăng xuất</a>
-    </nav>
-  </header>
 
-  <main class="container">
-    <div class="box">
-      <h2>Thông tin người dùng</h2>
-      <p>User: <b id="u"></b></p>
-      <p>Số dư: <b id="b"></b></p>
-      <p>Uy tín: <b id="r"></b></p>
-    </div>
-  </main>
+<header>
+  <div class="brand">
+    <a href="/">SHOP</a>
+    <small>Tài khoản của bạn</small>
+  </div>
+  <nav>
+    <a href="create.html">Đăng bán</a>
+    <a href="#" onclick="logout()">Đăng xuất</a>
+  </nav>
+</header>
 
-  <script src="assets/app.js"></script>
-  <script>
-    async function load() {
-      const r = await fetch(API + "/api/me", { credentials: "include" });
-      if (r.status === 401) return location.href = "login.html";
-      const d = await r.json();
-      u.innerText = d.user.username;
-      b.innerText = formatPrice(d.balance_cents);
-      rEl.innerText = d.user.reputation;
-    }
-    async function logout() {
-      await apiPost("/api/auth/logout", {});
-      location.href = "login.html";
-    }
-    const rEl = document.getElementById("r");
-    load();
-  </script>
+<main class="container">
+
+  <!-- ===== USER INFO ===== -->
+  <div class="box">
+    <h2>Thông tin người dùng</h2>
+    <p>User: <b id="u"></b></p>
+    <p>Số dư: <b id="b"></b></p>
+    <p>Uy tín: <b id="r"></b></p>
+  </div>
+
+  <!-- ===== SELLER MANAGE ===== -->
+  <div class="box">
+    <h2>🛒 Hàng bạn đang đăng bán</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Tên</th>
+          <th class="right">Giá</th>
+          <th class="center">SL</th>
+          <th class="center">Hành động</th>
+        </tr>
+      </thead>
+      <tbody id="myListings"></tbody>
+    </table>
+
+    <p id="emptyListings" class="muted-sm" hidden>
+      Bạn chưa có sản phẩm nào đang bán.
+    </p>
+  </div>
+
+</main>
+
+<script src="assets/app.js"></script>
+<script>
+/* ===== LOAD USER ===== */
+async function loadUser() {
+  const r = await fetch(API + "/api/me", { credentials: "include" });
+  if (r.status === 401) return location.href = "login.html";
+
+  const d = await r.json();
+  u.innerText = d.user.username;
+  b.innerText = formatPrice(d.balance_cents);
+  rEl.innerText = d.user.reputation;
+}
+
+/* ===== LOAD SELLER LISTINGS ===== */
+async function loadMyListings() {
+  const r = await apiGet("/api/my/listings");
+  if (!r.ok) return;
+
+  const items = (r.items || []).filter(i => i.status === "active"); // ❌ ẨN HÀNG ĐÃ BÁN
+
+  myListings.innerHTML = "";
+  emptyListings.hidden = items.length !== 0;
+
+  for (const i of items) {
+    myListings.innerHTML += `
+      <tr>
+        <td>
+          <b>${i.title}</b><br>
+          <span class="muted-sm">#${i.id.slice(0,6)}</span>
+        </td>
+        <td class="right">${formatPrice(i.price_cents)}</td>
+        <td class="center">${i.quantity}</td>
+        <td class="center">
+          <div class="actions">
+            <button onclick="viewListing('${i.id}')">Xem</button>
+            <button onclick="hideListing('${i.id}')">Ẩn</button>
+            <button onclick="deleteListing('${i.id}')">Xóa</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }
+}
+
+/* ===== ACTIONS ===== */
+function viewListing(id) {
+  location.href = "/listing.html?id=" + id;
+}
+
+async function hideListing(id) {
+  if (!confirm("Ẩn sản phẩm này khỏi trang mua?")) return;
+  const r = await apiPost(`/api/listings/${id}/hide`, {});
+  if (!r.ok) return alert(r.error);
+  loadMyListings();
+}
+
+async function deleteListing(id) {
+  if (!confirm("XÓA sản phẩm này?\n⚠ Không thể hoàn tác")) return;
+
+  const r = await fetch(API + `/api/listings/${id}`, {
+    method: "DELETE",
+    credentials: "include"
+  }).then(r => r.json());
+
+  if (!r.ok) return alert(r.error);
+  loadMyListings();
+}
+
+/* ===== LOGOUT ===== */
+async function logout() {
+  await apiPost("/api/auth/logout", {});
+  location.href = "login.html";
+}
+
+/* ===== INIT ===== */
+const rEl = document.getElementById("r");
+loadUser();
+loadMyListings();
+</script>
+
 </body>
 </html>
