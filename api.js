@@ -867,43 +867,37 @@ if (path === "/api/admin/settings" && req.method === "GET") {
   const admin = await requireAdmin(req, env);
   if (!admin) return withCors(bad("Unauthorized", 401));
 
-  const rows = await env.DB.prepare(
-    "SELECT key, value FROM system_settings"
-  ).all();
+  const rows = await env.DB
+    .prepare("SELECT key, value FROM system_settings")
+    .all();
 
   const map = {};
-  for (const r of (rows.results || [])) map[r.key] = r.value;
+  for (const r of (rows.results || [])) {
+    map[r.key] = r.value;
+  }
 
-  const res = ok({
+  return withCors(ok({
     settings: {
-      // phí
-      bank_fee_percent: Number(map.bank_fee_percent || "5"),
-      card_fee_percent: Number(map.card_fee_percent || "5"),
+      // ===== SITE =====
+      site_name: map.site_name || "SHOP",
+      site_tagline: map.site_tagline || "Chợ đồ số",
 
-      // bank NEW (theo admin page mới)
-      bank_name: map.bank_name || "",
-      bank_account_name: map.bank_account_name || "",
-      bank_account_number: map.bank_account_number || "",
-      bank_transfer_prefix: map.bank_transfer_prefix || "NAP",
+      // ===== PHÍ =====
+      bank_fee_percent: Number(map.bank_fee_percent || "0"),
+      card_fee_percent: Number(map.card_fee_percent || "0"),
 
-      // bank OLD (giữ tương thích nếu chỗ khác còn dùng)
+      // ===== BANK (WEB2M) =====
       web2m_token: map.web2m_token || "",
       web2m_bank_account: map.web2m_bank_account || "",
       web2m_prefix: map.web2m_prefix || "NAP",
 
-      // card
+      // ===== CARD =====
       card_provider: map.card_provider || "thesieure",
       card_api_key: map.card_api_key || "",
       card_partner_id: map.card_partner_id || "",
       card_callback_domain: map.card_callback_domain || ""
     }
-  });
-
-  // chống cache mạnh
-  res.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
-  res.headers.set("Pragma", "no-cache");
-
-  return withCors(res);
+  }));
 }
 
 
