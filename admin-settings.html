@@ -21,38 +21,35 @@
   <div class="box">
     <h2>Cấu hình hệ thống</h2>
 
-    <!-- ================= SITE ================= -->
+    <!-- ================= WEBSITE ================= -->
     <h3>Website</h3>
 
     <label>Tên website</label>
     <input id="site_name" placeholder="VD: NTT Market">
 
-    <label>Tagline (mô tả ngắn)</label>
+    <label>Tagline</label>
     <input id="site_tagline" placeholder="VD: Chợ đồ số – mua bán an toàn">
 
     <!-- ================= PHÍ ================= -->
     <h3 style="margin-top:20px;">Phí</h3>
 
     <label>Phí Bank (%)</label>
-    <input id="bank_fee_percent" type="number" placeholder="VD: 0">
+    <input id="bank_fee_percent" type="number">
 
     <label>Phí Thẻ (%)</label>
-    <input id="card_fee_percent" type="number" placeholder="VD: 20">
+    <input id="card_fee_percent" type="number">
 
-    <!-- ================= BANK ================= -->
-    <h3 style="margin-top:20px;">Ngân hàng nạp</h3>
+    <!-- ================= BANK (WEB2M) ================= -->
+    <h3 style="margin-top:20px;">Ngân hàng nạp (Web2M)</h3>
 
-    <label>Tên ngân hàng</label>
-    <input id="bank_name" placeholder="VD: MB Bank">
+    <label>Token Web2M</label>
+    <input id="web2m_token" placeholder="API token">
 
-    <label>Tên chủ tài khoản</label>
-    <input id="bank_account_name" placeholder="VD: NGUYEN VAN A">
+    <label>Số tài khoản nhận tiền</label>
+    <input id="web2m_bank_account" placeholder="0123456789">
 
-    <label>Số tài khoản</label>
-    <input id="bank_account_number" placeholder="0123456789">
-
-    <label>Nội dung chuyển khoản (prefix)</label>
-    <input id="bank_transfer_prefix" placeholder="NAP">
+    <label>Prefix nội dung chuyển khoản</label>
+    <input id="web2m_prefix" placeholder="NAP">
 
     <!-- ================= CARD ================= -->
     <h3 style="margin-top:20px;">Thẻ cào</h3>
@@ -89,7 +86,7 @@ async function load() {
     if (el) el.value = s[k];
   }
 
-  // cập nhật header preview
+  // preview header
   if (s.site_name) siteName.innerText = s.site_name;
   if (s.site_tagline) siteTagline.innerText = s.site_tagline;
 }
@@ -104,10 +101,9 @@ async function save() {
     bank_fee_percent: bank_fee_percent.value,
     card_fee_percent: card_fee_percent.value,
 
-    bank_name: bank_name.value,
-    bank_account_name: bank_account_name.value,
-    bank_account_number: bank_account_number.value,
-    bank_transfer_prefix: bank_transfer_prefix.value,
+    web2m_token: web2m_token.value,
+    web2m_bank_account: web2m_bank_account.value,
+    web2m_prefix: web2m_prefix.value,
 
     card_provider: card_provider.value,
     card_partner_id: card_partner_id.value,
