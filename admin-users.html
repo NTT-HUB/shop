@@ -17,8 +17,8 @@
       vertical-align: middle;
     }
     th {
-      background: #111;
       text-align: left;
+      background: #111;
     }
     .banned {
       color: #f87171;
@@ -27,15 +27,10 @@
     .actions {
       display: flex;
       gap: 6px;
-      flex-wrap: wrap;
     }
     .actions button {
       padding: 4px 8px;
       font-size: 12px;
-    }
-    .danger {
-      color: #f87171;
-      border-color: #f87171;
     }
     .search-box {
       margin-bottom: 10px;
@@ -53,7 +48,7 @@
 
 <header>
   <div class="brand">
-    <a href="/" id="siteName">SHOP</a>
+   <a href="/" id="siteName">SHOP</a>
     <small>Admin – Quản lý người dùng</small>
   </div>
 </header>
@@ -113,9 +108,6 @@ async function load() {
           }
           <button onclick="adjust('${u.id}', true)">+Tiền</button>
           <button onclick="adjust('${u.id}', false)">-Tiền</button>
-          <button class="danger" onclick="removeUser('${u.id}','${u.username}')">
-            Xóa
-          </button>
         </div>
       </td>
     </tr>
@@ -137,7 +129,7 @@ async function adjust(userId, add) {
   const amount = prompt(add ? "Nhập số tiền CỘNG (VNĐ):" : "Nhập số tiền TRỪ (VNĐ):");
   if (!amount) return;
 
-  const vnd = Number(amount.replace(/\D/g,""));
+  const vnd = Number(amount.replace(/[^0-9]/g,""));
   if (!vnd) return alert("Sai số tiền");
 
   const note = prompt("Ghi chú (tuỳ chọn):") || "";
@@ -149,22 +141,6 @@ async function adjust(userId, add) {
   });
 
   if (!r.ok) return alert(r.error);
-  load();
-}
-
-async function removeUser(userId, username) {
-  const ok = confirm(
-    `⚠️ XÓA USER: ${username}\n\n` +
-    `• User không thể đăng nhập\n` +
-    `• Hàng đang bán sẽ bị ẩn\n` +
-    `• KHÔNG thể hoàn tác`
-  );
-  if (!ok) return;
-
-  const r = await apiPost("/api/admin/users/delete", { user_id: userId });
-  if (!r.ok) return alert(r.error);
-
-  alert("✅ Đã xóa user");
   load();
 }
 
