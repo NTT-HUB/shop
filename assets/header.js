@@ -27,6 +27,9 @@ async function loadHeader() {
           <a href="/orders.html">Đơn hàng</a>
           <a href="/deposit.html">Nạp tiền</a>
           <a href="/withdraw.html">Rút tiền</a>
+          <a href="/sales-history.html">Lịch sử bán</a>
+          <a href="/withdraw-history.html">Lịch sử rút tiền</a>
+          <a href="/deposit-history.html">Lịch sử giao dịch</a>
           <a href="/login.html">Đăng nhập</a>
         `}
       </nav>
