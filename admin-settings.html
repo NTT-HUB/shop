@@ -2,15 +2,15 @@
 <html lang="vi">
 <head>
   <meta charset="utf-8">
-  <title>Admin – Cấu hình nạp tiền</title>
+  <title>Admin – Cấu hình hệ thống</title>
   <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
 
 <header>
   <div class="brand">
-    <a href="/">SHOP</a>
-    <small>Admin – Cấu hình nạp tiền</small>
+    <a href="/" id="siteName">SHOP</a>
+    <small id="siteTagline">Admin – Cấu hình hệ thống</small>
   </div>
   <nav>
     <a href="/admin-dashboard.html">Dashboard</a>
@@ -19,10 +19,19 @@
 
 <main class="container">
   <div class="box">
-    <h2>Cấu hình nạp tiền</h2>
+    <h2>Cấu hình hệ thống</h2>
+
+    <!-- ================= SITE ================= -->
+    <h3>Website</h3>
+
+    <label>Tên website</label>
+    <input id="site_name" placeholder="VD: NTT Market">
+
+    <label>Tagline (mô tả ngắn)</label>
+    <input id="site_tagline" placeholder="VD: Chợ đồ số – mua bán an toàn">
 
     <!-- ================= PHÍ ================= -->
-    <h3>Phí</h3>
+    <h3 style="margin-top:20px;">Phí</h3>
 
     <label>Phí Bank (%)</label>
     <input id="bank_fee_percent" type="number" placeholder="VD: 0">
@@ -31,7 +40,7 @@
     <input id="card_fee_percent" type="number" placeholder="VD: 20">
 
     <!-- ================= BANK ================= -->
-    <h3 style="margin-top:20px;">Ngân hàng</h3>
+    <h3 style="margin-top:20px;">Ngân hàng nạp</h3>
 
     <label>Tên ngân hàng</label>
     <input id="bank_name" placeholder="VD: MB Bank">
@@ -45,7 +54,7 @@
     <label>Nội dung chuyển khoản (prefix)</label>
     <input id="bank_transfer_prefix" placeholder="NAP">
 
-    <!-- ================= THẺ CÀO ================= -->
+    <!-- ================= CARD ================= -->
     <h3 style="margin-top:20px;">Thẻ cào</h3>
 
     <label>Provider</label>
@@ -60,7 +69,7 @@
     <label>Domain callback</label>
     <input id="card_callback_domain" placeholder="shop-aaa.pages.dev">
 
-    <button class="btn block" onclick="save()">Lưu cấu hình</button>
+    <button class="btn block" onclick="save()">💾 Lưu cấu hình</button>
     <p id="msg" class="muted"></p>
   </div>
 </main>
@@ -79,10 +88,19 @@ async function load() {
     const el = document.getElementById(k);
     if (el) el.value = s[k];
   }
+
+  // cập nhật header preview
+  if (s.site_name) siteName.innerText = s.site_name;
+  if (s.site_tagline) siteTagline.innerText = s.site_tagline;
 }
 
 async function save() {
+  msg.innerText = "Đang lưu...";
+
   const body = {
+    site_name: site_name.value,
+    site_tagline: site_tagline.value,
+
     bank_fee_percent: bank_fee_percent.value,
     card_fee_percent: card_fee_percent.value,
 
@@ -99,11 +117,11 @@ async function save() {
 
   const r = await apiPost("/api/admin/settings", body);
   if (!r.ok) {
-    alert(r.error || "Lưu thất bại");
+    msg.innerText = r.error || "Lưu thất bại";
     return;
   }
 
-  msg.textContent = "✅ Đã lưu cấu hình thành công";
+  msg.innerText = "✅ Đã lưu cấu hình thành công";
 }
 
 load();
