@@ -1363,7 +1363,8 @@ if (path === "/api/webhooks/card" && req.method === "POST") {
 }
 
 
-// GET /api/orders/:id
+ // GET /api/orders/:id
+// GET /api/orders/:id  (trả order + listing + feedback)
 if (
   path.startsWith("/api/orders/") &&
   req.method === "GET" &&
@@ -1375,14 +1376,22 @@ if (
 
   const orderId = path.split("/").pop();
 
+  // ✅ lấy order + listing (kể cả sold_out/ẩn) + seller
   const row = await env.DB.prepare(`
     SELECT
-      o.*,
-      l.title AS listing_title,
-      l.kind AS listing_kind,
-      l.contact_link AS listing_contact_link,
-      s.username AS seller_username,
-      s.reputation AS seller_reputation
+      o.id, o.buyer_id, o.seller_id, o.listing_id,
+      o.unit_price_cents, o.quantity, o.subtotal_cents,
+      o.platform_fee_cents, o.seller_income_cents,
+      o.status, o.created_at,
+
+      l.title            AS listing_title,
+      l.kind             AS listing_kind,
+      l.contact_link     AS listing_contact_link,
+      l.description      AS listing_description,
+
+      s.username         AS seller_username,
+      s.reputation       AS seller_reputation,
+      s.status           AS seller_status
     FROM orders o
     LEFT JOIN listings l ON l.id = o.listing_id
     LEFT JOIN users s ON s.id = o.seller_id
@@ -1392,77 +1401,41 @@ if (
 
   if (!row) return withCors(bad("Not found", 404));
 
-  if (
-    row.buyer_id !== u.userId &&
-    row.seller_id !== u.userId &&
-    u.role !== "admin"
-  ) {
+  // quyền xem
+  if (row.buyer_id !== u.userId && row.seller_id !== u.userId && u.role !== "admin") {
     return withCors(bad("Forbidden", 403));
   }
 
-  // ✅ LẤY FEEDBACK
-  const fb = await env.DB.prepare(`
-    SELECT type, created_at
+  // feedback (buyer đánh giá)
+  let fb = await env.DB.prepare(`
+    SELECT type, note, created_at
     FROM feedback
-    WHERE order_id = ? AND buyer_id = ?
+    WHERE order_id = ?
     LIMIT 1
-  `).bind(orderId, row.buyer_id).first();
+  `).bind(orderId).first();
 
-  return withCors(ok({
-    order: {
-      id: row.id,
-      buyer_id: row.buyer_id,
-      seller_id: row.seller_id,
-      listing_id: row.listing_id,
-      subtotal_cents: row.subtotal_cents,
-      status: row.status,
-      created_at: row.created_at
-    },
-    listing: {
-      title: row.listing_title,
-      kind: row.listing_kind,
-      contact_link: row.listing_contact_link,
-      seller_username: row.seller_username,
-      seller_reputation: row.seller_reputation
-    },
-    feedback: fb ? {
-      type: fb.type,
-      created_at: fb.created_at
-    } : null
-  }));
-}
-
-  // ===== CHECK FEEDBACK =====
-  const fb = await env.DB.prepare(`
-    SELECT type, created_at
-    FROM feedback
-    WHERE order_id = ? AND user_id = ?
-    LIMIT 1
-  `).bind(orderId, row.buyer_id).first();
-
-  // ===== AUTO TRUST CHO AC SAU 3 PHÚT =====
-  if (row.listing_kind === "ac" && row.status === "paid") {
+  // ✅ auto-trust cho AC sau 3 phút nếu chưa feedback
+  if (row.listing_kind === "ac" && row.status === "paid" && !fb) {
     const deadline = row.created_at + 3 * 60 * 1000;
+    if (Date.now() > deadline) {
+      try {
+        await env.DB.prepare(`
+          INSERT INTO feedback (order_id, buyer_id, seller_id, type, note, created_at)
+          VALUES (?, ?, ?, 'trust', 'Auto trust (AC warranty expired)', ?)
+        `).bind(orderId, row.buyer_id, row.seller_id, Date.now()).run();
 
-    if (Date.now() > deadline && !fb) {
-      await env.DB.prepare(`
-        INSERT INTO feedback (order_id, buyer_id, seller_id, type, note, created_at)
-        VALUES (?, ?, ?, 'trust', 'Auto trust (AC warranty expired)', ?)
-      `).bind(
-        row.id,
-        row.buyer_id,
-        row.seller_id,
-        Date.now()
-      ).run().catch(() => {});
+        await env.DB.prepare(`
+          UPDATE users SET reputation = reputation + 1, updated_at=?
+          WHERE id=?
+        `).bind(Date.now(), row.seller_id).run();
 
-      await env.DB.prepare(`
-        UPDATE users SET reputation = reputation + 1, updated_at=?
-        WHERE id=?
-      `).bind(Date.now(), row.seller_id).run().catch(() => {});
+        fb = { type: "trust", note: "Auto trust (AC warranty expired)", created_at: Date.now() };
+      } catch (_) {
+        // ignore duplicate
+      }
     }
   }
 
-  // ===== RESPONSE =====
   const res = ok({
     order: {
       id: row.id,
@@ -1477,19 +1450,23 @@ if (
       status: row.status,
       created_at: row.created_at
     },
-    listing: {
+    listing: row.listing_title ? {
+      id: row.listing_id,
       title: row.listing_title,
       kind: row.listing_kind,
       contact_link: row.listing_contact_link,
+      description: row.listing_description,
       seller_username: row.seller_username,
-      seller_reputation: row.seller_reputation
-    },
-    feedback: fb ? { type: fb.type, created_at: fb.created_at } : null
+      seller_reputation: row.seller_reputation ?? 0,
+      seller_status: row.seller_status
+    } : null,
+    feedback: fb ? { type: fb.type, note: fb.note ?? null, created_at: fb.created_at } : null
   });
 
   res.headers.set("Cache-Control", "no-store");
   return withCors(res);
 }
+
 
 
       // GET /api/orders/:id/secret
