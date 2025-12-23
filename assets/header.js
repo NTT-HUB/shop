@@ -5,17 +5,15 @@ async function loadHeader() {
   const isAdmin = location.pathname.includes("admin-");
 
   mount.innerHTML = `
-    <header class="header ${isAdmin ? "header--admin" : ""}">
+    <header class="site-header ${isAdmin ? "is-admin" : ""}">
       <div class="brand">
-        <a href="${isAdmin ? "/admin-dashboard.html" : "/"}" class="logo">SHOP</a>
-        <small class="tagline">
-          ${isAdmin ? "Admin – Quản trị hệ thống" : "Mua bán nhanh – an toàn"}
-        </small>
+        <a href="${isAdmin ? "/admin-dashboard.html" : "/"}" id="siteName">Neko Shop</a>
+        <small id="siteTagline">${isAdmin ? "Admin – Quản trị hệ thống" : "mua bán - giao dịch nhanh"}</small>
       </div>
 
-      <button class="hamburger" id="menuBtn">☰</button>
+      <button class="site-hamburger" id="menuBtn" aria-label="Mở menu" aria-expanded="false">☰</button>
 
-      <nav class="drawer" id="drawer">
+      <nav class="site-drawer" id="drawer" aria-hidden="true">
         ${isAdmin ? `
           <a href="/admin-dashboard.html">Dashboard</a>
           <a href="/admin-users.html">Users</a>
@@ -33,7 +31,7 @@ async function loadHeader() {
         `}
       </nav>
 
-      <div class="overlay" id="overlay"></div>
+      <div class="site-overlay" id="overlay"></div>
     </header>
   `;
 
@@ -44,19 +42,26 @@ async function loadHeader() {
   const open = () => {
     drawer.classList.add("open");
     overlay.classList.add("show");
+    btn.setAttribute("aria-expanded", "true");
+    drawer.setAttribute("aria-hidden", "false");
   };
 
   const close = () => {
     drawer.classList.remove("open");
     overlay.classList.remove("show");
+    btn.setAttribute("aria-expanded", "false");
+    drawer.setAttribute("aria-hidden", "true");
   };
 
-  btn.onclick = open;
-  overlay.onclick = close;
+  btn.addEventListener("click", () => {
+    drawer.classList.contains("open") ? close() : open();
+  });
 
-  drawer.onclick = (e) => {
+  overlay.addEventListener("click", close);
+
+  drawer.addEventListener("click", (e) => {
     if (e.target.tagName === "A") close();
-  };
+  });
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") close();
