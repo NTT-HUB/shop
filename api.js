@@ -477,6 +477,23 @@ if (path.startsWith("/api/listings/") && req.method === "DELETE") {
   return withCors(ok({ message: "Đã xóa sản phẩm" }));
 }
 
+// GET /api/my/listings  (SELLER: LIST MY LISTINGS)
+if (path === "/api/my/listings" && req.method === "GET") {
+  const u = await requireAuth(req, env);
+  if (!u) return withCors(bad("Unauthorized", 401));
+
+  const rows = await env.DB.prepare(`
+    SELECT
+      id, kind, title, description, price_cents, quantity, status, contact_link, created_at
+    FROM listings
+    WHERE seller_id=?
+    ORDER BY created_at DESC
+    LIMIT 200
+  `).bind(u.userId).all();
+
+  return withCors(ok({ items: rows.results || [] }));
+}
+
 
       // -------- PURCHASE --------
 // POST /api/orders (BUY ALL)
