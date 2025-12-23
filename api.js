@@ -916,18 +916,20 @@ if (path === "/api/admin/settings" && req.method === "POST") {
   if (!body) return withCors(bad("Invalid JSON"));
 
   // chỉ cho update whitelist key
-  const allow = new Set([
-  "bank_fee_percent","card_fee_percent",
-
-  // bank NEW
-  "bank_name","bank_account_name","bank_account_number","bank_transfer_prefix",
-
-  // bank OLD
-  "web2m_token","web2m_bank_account","web2m_prefix",
-
-  // card
-  "card_provider","card_api_key","card_partner_id","card_callback_domain"
+ const allow = new Set([
+  "site_name",
+  "site_tagline",      // 👈 THÊM
+  "bank_fee_percent",
+  "card_fee_percent",
+  "web2m_token",
+  "web2m_bank_account",
+  "web2m_prefix",
+  "card_provider",
+  "card_api_key",
+  "card_partner_id",
+  "card_callback_domain"
 ]);
+
 
   const now = Date.now();
   const entries = Object.entries(body || {}).filter(([k]) => allow.has(k));
