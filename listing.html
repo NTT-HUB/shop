@@ -103,19 +103,7 @@ async function load() {
 
 // ===== CONFIRM BUY ALL =====
 async function confirmBuy() {
-  if (!listing) return;
-
-  // đã bán
-  if (listing.quantity <= 0 || listing.status === "sold_out") {
-    alert("Sản phẩm này đã được bán");
-    return;
-  }
-
-  // chặn mua của chính mình
-  if (listing.is_owner) {
-    alert("Bạn không thể mua sản phẩm của chính mình");
-    return;
-  }
+  if (!listing || listing.quantity <= 0) return;
 
   const ok = confirm(
     "BẠN CÓ CHẮC MUỐN MUA TOÀN BỘ SẢN PHẨM NÀY?\n\n" +
@@ -125,19 +113,12 @@ async function confirmBuy() {
   );
 
   if (!ok) return;
-
   buyAll();
 }
 
-
 // ===== BUY ALL =====
 async function buyAll() {
-  if (buying) return;
-  buying = true;
-
-  msg.innerText = "⏳ Đang tạo đơn hàng...";
-  const btn = buyBox.querySelector("button");
-  if (btn) btn.disabled = true;
+  msg.innerText = "Đang tạo đơn hàng...";
 
   const res = await apiPost("/api/orders", {
     listing_id: id,
@@ -146,14 +127,11 @@ async function buyAll() {
 
   if (!res.ok) {
     msg.innerText = res.error || "Mua thất bại";
-    buying = false;
-    if (btn) btn.disabled = false;
     return;
   }
 
   location.href = "/order.html?id=" + res.order_id;
 }
-
 
 load();
 </script>
