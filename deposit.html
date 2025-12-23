@@ -113,7 +113,7 @@ function showTab(tab) {
 
 /* ================= BANK ================= */
 async function depositBank() {
-  const vnd = Number(bank_amount.value.replace(/[^0-9]/g,""));
+ const vnd = Number(bank_amount.value.replace(/\D/g, ""));
   if (!vnd || vnd < 10000)
     return alert("Số tiền tối thiểu 10.000đ");
 
