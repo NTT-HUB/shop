@@ -1953,7 +1953,17 @@ if (path === "/api/card/submit" && req.method === "POST") {
   const apiKey = String(s.card_api_key);
 
   // sign theo guide phổ biến: md5(partner_id + api_key + request_id)
-  const sign = md5(partnerId + apiKey + requestId);
+  const signRaw =
+  partnerId +
+  requestId +
+  telco +
+  String(gross) +
+  serial +
+  code +
+  apiKey;
+
+const sign = md5(signRaw);
+
 
   const callbackUrl = `https://${s.card_callback_domain}/api/webhooks/thesieure`;
 
