@@ -15,139 +15,6 @@ export default {
       return new Response(res.body, { status: res.status, headers: h });
     };
 
-   // ===== MD5 (FULL) =====
-// Source: tiny JS md5 implementation (no deps)
-function md5(str) {
-  function cmn(q, a, b, x, s, t) {
-    a = add32(add32(a, q), add32(x, t));
-    return add32((a << s) | (a >>> (32 - s)), b);
-  }
-  function ff(a, b, c, d, x, s, t) { return cmn((b & c) | (~b & d), a, b, x, s, t); }
-  function gg(a, b, c, d, x, s, t) { return cmn((b & d) | (c & ~d), a, b, x, s, t); }
-  function hh(a, b, c, d, x, s, t) { return cmn(b ^ c ^ d, a, b, x, s, t); }
-  function ii(a, b, c, d, x, s, t) { return cmn(c ^ (b | ~d), a, b, x, s, t); }
-
-  function md5cycle(x, k) {
-    let [a, b, c, d] = x;
-
-    a = ff(a, b, c, d, k[0], 7, -680876936);
-    d = ff(d, a, b, c, k[1], 12, -389564586);
-    c = ff(c, d, a, b, k[2], 17, 606105819);
-    b = ff(b, c, d, a, k[3], 22, -1044525330);
-    a = ff(a, b, c, d, k[4], 7, -176418897);
-    d = ff(d, a, b, c, k[5], 12, 1200080426);
-    c = ff(c, d, a, b, k[6], 17, -1473231341);
-    b = ff(b, c, d, a, k[7], 22, -45705983);
-    a = ff(a, b, c, d, k[8], 7, 1770035416);
-    d = ff(d, a, b, c, k[9], 12, -1958414417);
-    c = ff(c, d, a, b, k[10], 17, -42063);
-    b = ff(b, c, d, a, k[11], 22, -1990404162);
-    a = ff(a, b, c, d, k[12], 7, 1804603682);
-    d = ff(d, a, b, c, k[13], 12, -40341101);
-    c = ff(c, d, a, b, k[14], 17, -1502002290);
-    b = ff(b, c, d, a, k[15], 22, 1236535329);
-
-    a = gg(a, b, c, d, k[1], 5, -165796510);
-    d = gg(d, a, b, c, k[6], 9, -1069501632);
-    c = gg(c, d, a, b, k[11], 14, 643717713);
-    b = gg(b, c, d, a, k[0], 20, -373897302);
-    a = gg(a, b, c, d, k[5], 5, -701558691);
-    d = gg(d, a, b, c, k[10], 9, 38016083);
-    c = gg(c, d, a, b, k[15], 14, -660478335);
-    b = gg(b, c, d, a, k[4], 20, -405537848);
-    a = gg(a, b, c, d, k[9], 5, 568446438);
-    d = gg(d, a, b, c, k[14], 9, -1019803690);
-    c = gg(c, d, a, b, k[3], 14, -187363961);
-    b = gg(b, c, d, a, k[8], 20, 1163531501);
-    a = gg(a, b, c, d, k[13], 5, -1444681467);
-    d = gg(d, a, b, c, k[2], 9, -51403784);
-    c = gg(c, d, a, b, k[7], 14, 1735328473);
-    b = gg(b, c, d, a, k[12], 20, -1926607734);
-
-    a = hh(a, b, c, d, k[5], 4, -378558);
-    d = hh(d, a, b, c, k[8], 11, -2022574463);
-    c = hh(c, d, a, b, k[11], 16, 1839030562);
-    b = hh(b, c, d, a, k[14], 23, -35309556);
-    a = hh(a, b, c, d, k[1], 4, -1530992060);
-    d = hh(d, a, b, c, k[4], 11, 1272893353);
-    c = hh(c, d, a, b, k[7], 16, -155497632);
-    b = hh(b, c, d, a, k[10], 23, -1094730640);
-    a = hh(a, b, c, d, k[13], 4, 681279174);
-    d = hh(d, a, b, c, k[0], 11, -358537222);
-    c = hh(c, d, a, b, k[3], 16, -722521979);
-    b = hh(b, c, d, a, k[6], 23, 76029189);
-    a = hh(a, b, c, d, k[9], 4, -640364487);
-    d = hh(d, a, b, c, k[12], 11, -421815835);
-    c = hh(c, d, a, b, k[15], 16, 530742520);
-    b = hh(b, c, d, a, k[2], 23, -995338651);
-
-    a = ii(a, b, c, d, k[0], 6, -198630844);
-    d = ii(d, a, b, c, k[7], 10, 1126891415);
-    c = ii(c, d, a, b, k[14], 15, -1416354905);
-    b = ii(b, c, d, a, k[5], 21, -57434055);
-    a = ii(a, b, c, d, k[12], 6, 1700485571);
-    d = ii(d, a, b, c, k[3], 10, -1894986606);
-    c = ii(c, d, a, b, k[10], 15, -1051523);
-    b = ii(b, c, d, a, k[1], 21, -2054922799);
-    a = ii(a, b, c, d, k[8], 6, 1873313359);
-    d = ii(d, a, b, c, k[15], 10, -30611744);
-    c = ii(c, d, a, b, k[6], 15, -1560198380);
-    b = ii(b, c, d, a, k[13], 21, 1309151649);
-    a = ii(a, b, c, d, k[4], 6, -145523070);
-    d = ii(d, a, b, c, k[11], 10, -1120210379);
-    c = ii(c, d, a, b, k[2], 15, 718787259);
-    b = ii(b, c, d, a, k[9], 21, -343485551);
-
-    x[0] = add32(a, x[0]);
-    x[1] = add32(b, x[1]);
-    x[2] = add32(c, x[2]);
-    x[3] = add32(d, x[3]);
-  }
-
-  function md51(s) {
-    const txt = unescape(encodeURIComponent(s));
-    const n = txt.length;
-    const state = [1732584193, -271733879, -1732584194, 271733878];
-    let i;
-
-    for (i = 64; i <= n; i += 64) {
-      md5cycle(state, md5blk(txt.substring(i - 64, i)));
-    }
-    const tail = new Array(16).fill(0);
-    const remaining = txt.substring(i - 64);
-    for (i = 0; i < remaining.length; i++) tail[i >> 2] |= remaining.charCodeAt(i) << ((i % 4) << 3);
-    tail[i >> 2] |= 0x80 << ((i % 4) << 3);
-    if (i > 55) { md5cycle(state, tail); for (i = 0; i < 16; i++) tail[i] = 0; }
-    tail[14] = n * 8;
-    md5cycle(state, tail);
-    return state;
-  }
-
-  function md5blk(s) {
-    const md5blks = [];
-    for (let i = 0; i < 64; i += 4) {
-      md5blks[i >> 2] =
-        s.charCodeAt(i) +
-        (s.charCodeAt(i + 1) << 8) +
-        (s.charCodeAt(i + 2) << 16) +
-        (s.charCodeAt(i + 3) << 24);
-    }
-    return md5blks;
-  }
-
-  function rhex(n) {
-    let s = "", j = 0;
-    for (; j < 4; j++) s += ("0" + ((n >> (j * 8 + 4)) & 0x0f).toString(16)).slice(-2) + ("0" + ((n >> (j * 8)) & 0x0f).toString(16)).slice(-2);
-    return s;
-  }
-
-  function hex(x) { return x.map(rhex).join(""); }
-  function add32(a, b) { return (a + b) & 0xffffffff; }
-
-  return hex(md51(str));
-}
-
-
     try {
       // -------- HEALTH / DEBUG --------
       if (path === "/api/health") {
@@ -782,10 +649,8 @@ if (path === "/api/my/withdrawals" && req.method === "GET") {
     const rows = await env.DB.prepare(`
       SELECT
         id,
-        gross_cents,
-        fee_cents,
-        net_cents,
-        bank_info,
+        amount,        -- ✅ CỘT ĐÚNG
+        method,
         status,
         created_at
       FROM withdrawals
@@ -794,19 +659,11 @@ if (path === "/api/my/withdrawals" && req.method === "GET") {
       LIMIT 100
     `).bind(u.userId).all();
 
+    // chuẩn hoá cho frontend dùng formatPrice
     const items = (rows.results || []).map(w => ({
       id: w.id,
-      amount_cents: w.gross_cents,     // frontend dùng formatPrice
-      fee_cents: w.fee_cents,
-      net_cents: w.net_cents,
-      method: (() => {
-        try {
-          const info = JSON.parse(w.bank_info || "{}");
-          return info.type || "bank";
-        } catch {
-          return "bank";
-        }
-      })(),
+      amount_cents: w.amount * 100, // ✅ convert sang cents
+      method: w.method,
       status: w.status,
       created_at: w.created_at
     }));
@@ -815,7 +672,6 @@ if (path === "/api/my/withdrawals" && req.method === "GET") {
     res.headers.set("Cache-Control", "no-store");
     return withCors(res);
   } catch (e) {
-    console.error("WITHDRAW LIST ERROR:", e);
     return withCors(bad("Withdrawals SQL error: " + e.message, 500));
   }
 }
@@ -1459,13 +1315,36 @@ if (path === "/api/webhooks/card" && req.method === "POST") {
   // - status: success/failed
   // - provider_txn_id
   // - gross_cents (nếu provider trả)
-  const deposit_id = String(body.deposit_id || body.request_id || "");
-  const status = String(body.status || "");
+  const deposit_key = String(body.deposit_id || body.request_id || "");
+
+  // Thế giới nạp thẻ hay trả status kiểu số (1=success, khác=fail) hoặc chuỗi.
+  const stRaw = body.status;
+  const status = normalizeCardStatus(stRaw);
+
+  // trans_id của provider (nếu có)
   const provider_txn_id = String(body.provider_txn_id || body.trans_id || "");
 
-  if (!deposit_id) return withCors(bad("Missing deposit_id"));
+  if (!deposit_key) return withCors(bad("Missing deposit_id"));
 
-  const dep = await env.DB.prepare("SELECT * FROM deposits WHERE id=?").bind(deposit_id).first();
+  // verify callback signature (nếu provider gửi)
+  // Theo tài liệu chargingws/v2: callback_sign = md5(partner_key + card_code + card_serial)
+  // (card_code = code, card_serial = serial)
+  if (body.sign && body.code && body.serial) {
+    const s = await getSettings(env);
+    const partnerKey = String(s.card_api_key || "");
+    if (partnerKey) {
+      const expected = md5(partnerKey + String(body.code) + String(body.serial));
+      if (String(body.sign) !== expected) {
+        return withCors(bad("Invalid signature", 403));
+      }
+    }
+  }
+
+  // deposit_key có thể là UUID (id) hoặc request_id (đang lưu ở provider_txn_id)
+  let dep = await env.DB.prepare("SELECT * FROM deposits WHERE id=?").bind(deposit_key).first();
+  if (!dep) {
+    dep = await env.DB.prepare("SELECT * FROM deposits WHERE provider_txn_id=?").bind(deposit_key).first();
+  }
   if (!dep) return withCors(bad("Not found", 404));
   if (dep.status !== "pending") return withCors(ok({ status: dep.status })); // idempotent
 
@@ -1496,111 +1375,52 @@ if (path === "/api/webhooks/card" && req.method === "POST") {
 }
 
 
- // GET /api/orders/:id
-// GET /api/orders/:id  (trả order + listing + feedback)
-if (
-  path.startsWith("/api/orders/") &&
-  req.method === "GET" &&
-  !path.endsWith("/secret") &&
-  !path.endsWith("/feedback")
-) {
-  const u = await requireAuth(req, env);
-  if (!u) return withCors(bad("Unauthorized", 401));
+      // GET /api/orders/:id
+      if (path.startsWith("/api/orders/") && req.method === "GET" && !path.endsWith("/secret") && !path.endsWith("/feedback")) {
+        const u = await requireAuth(req, env);
+        if (!u) return withCors(bad("Unauthorized", 401));
 
-  const orderId = path.split("/").pop();
+        const orderId = path.split("/").pop();
+        const order = await env.DB.prepare("SELECT * FROM orders WHERE id=?").bind(orderId).first();
+        if (!order) return withCors(bad("Not found", 404));
+        if (order.buyer_id !== u.userId && order.seller_id !== u.userId && u.role !== "admin") {
+          return withCors(bad("Forbidden", 403));
+        }
 
-  // ✅ lấy order + listing (kể cả sold_out/ẩn) + seller
-  const row = await env.DB.prepare(`
-    SELECT
-      o.id, o.buyer_id, o.seller_id, o.listing_id,
-      o.unit_price_cents, o.quantity, o.subtotal_cents,
-      o.platform_fee_cents, o.seller_income_cents,
-      o.status, o.created_at,
+// ===== AUTO TRUST FOR AC AFTER 3 MINUTES =====
+const listingInfo = await env.DB.prepare(
+  "SELECT kind FROM listings WHERE id=?"
+).bind(order.listing_id).first();
 
-      l.title            AS listing_title,
-      l.kind             AS listing_kind,
-      l.contact_link     AS listing_contact_link,
-      l.description      AS listing_description,
+if (listingInfo?.kind === "ac") {
+  const deadline = order.created_at + 3 * 60 * 1000;
 
-      s.username         AS seller_username,
-      s.reputation       AS seller_reputation,
-      s.status           AS seller_status
-    FROM orders o
-    LEFT JOIN listings l ON l.id = o.listing_id
-    LEFT JOIN users s ON s.id = o.seller_id
-    WHERE o.id = ?
-    LIMIT 1
-  `).bind(orderId).first();
+  if (Date.now() > deadline && order.status === "paid") {
+    const fb = await env.DB.prepare(
+      "SELECT order_id FROM feedback WHERE order_id=?"
+    ).bind(order.id).first();
 
-  if (!row) return withCors(bad("Not found", 404));
+    if (!fb) {
+      // auto trust
+      await env.DB.prepare(
+        `INSERT INTO feedback (order_id, buyer_id, seller_id, type, note, created_at)
+         VALUES (?, ?, ?, 'trust', 'Auto trust (AC warranty expired)', ?)`
+      ).bind(
+        order.id,
+        order.buyer_id,
+        order.seller_id,
+        Date.now()
+      ).run().catch(() => {});
 
-  // quyền xem
-  if (row.buyer_id !== u.userId && row.seller_id !== u.userId && u.role !== "admin") {
-    return withCors(bad("Forbidden", 403));
-  }
-
-  // feedback (buyer đánh giá)
-  let fb = await env.DB.prepare(`
-    SELECT type, note, created_at
-    FROM feedback
-    WHERE order_id = ?
-    LIMIT 1
-  `).bind(orderId).first();
-
-  // ✅ auto-trust cho AC sau 3 phút nếu chưa feedback
-  if (row.listing_kind === "ac" && row.status === "paid" && !fb) {
-    const deadline = row.created_at + 3 * 60 * 1000;
-    if (Date.now() > deadline) {
-      try {
-        await env.DB.prepare(`
-          INSERT INTO feedback (order_id, buyer_id, seller_id, type, note, created_at)
-          VALUES (?, ?, ?, 'trust', 'Auto trust (AC warranty expired)', ?)
-        `).bind(orderId, row.buyer_id, row.seller_id, Date.now()).run();
-
-        await env.DB.prepare(`
-          UPDATE users SET reputation = reputation + 1, updated_at=?
-          WHERE id=?
-        `).bind(Date.now(), row.seller_id).run();
-
-        fb = { type: "trust", note: "Auto trust (AC warranty expired)", created_at: Date.now() };
-      } catch (_) {
-        // ignore duplicate
-      }
+      await env.DB.prepare(
+        "UPDATE users SET reputation = reputation + 1, updated_at=? WHERE id=?"
+      ).bind(Date.now(), order.seller_id).run().catch(() => {});
     }
   }
-
-  const res = ok({
-    order: {
-      id: row.id,
-      buyer_id: row.buyer_id,
-      seller_id: row.seller_id,
-      listing_id: row.listing_id,
-      unit_price_cents: row.unit_price_cents,
-      quantity: row.quantity,
-      subtotal_cents: row.subtotal_cents,
-      platform_fee_cents: row.platform_fee_cents,
-      seller_income_cents: row.seller_income_cents,
-      status: row.status,
-      created_at: row.created_at
-    },
-    listing: row.listing_title ? {
-      id: row.listing_id,
-      title: row.listing_title,
-      kind: row.listing_kind,
-      contact_link: row.listing_contact_link,
-      description: row.listing_description,
-      seller_username: row.seller_username,
-      seller_reputation: row.seller_reputation ?? 0,
-      seller_status: row.seller_status
-    } : null,
-    feedback: fb ? { type: fb.type, note: fb.note ?? null, created_at: fb.created_at } : null
-  });
-
-  res.headers.set("Cache-Control", "no-store");
-  return withCors(res);
 }
 
-
+        return withCors(ok({ order }));
+      }
 
       // GET /api/orders/:id/secret
       if (path.startsWith("/api/orders/") && path.endsWith("/secret") && req.method === "GET") {
@@ -1626,52 +1446,46 @@ if (
         return withCors(ok({ secret_txt: secret.encrypted_blob }));
       }
 
-// POST /api/orders/:id/feedback
-{
-  const m = path.match(/^\/api\/orders\/([0-9a-f-]{36})\/feedback$/i);
-  if (m && req.method === "POST") {
-    const u = await requireAuth(req, env);
-    if (!u) return withCors(bad("Unauthorized", 401));
+      // POST /api/orders/:id/feedback
+      if (path.startsWith("/api/orders/") && path.endsWith("/feedback") && req.method === "POST") {
+        const u = await requireAuth(req, env);
+        if (!u) return withCors(bad("Unauthorized", 401));
 
-    const orderId = m[1];
+        const parts = path.split("/");
+        const orderId = parts[3];
 
-    const order = await env.DB.prepare("SELECT * FROM orders WHERE id=?")
-      .bind(orderId)
-      .first();
+        const body = await readJson(req);
+        if (!body) return withCors(bad("Invalid JSON"));
 
-    if (!order) return withCors(bad("Not found", 404));
-    if (order.buyer_id !== u.userId && u.role !== "admin")
-      return withCors(bad("Forbidden", 403));
+        const { type, note } = body;
+        if (type !== "trust" && type !== "scam") return withCors(bad("Invalid type"));
 
-    // chặn đánh giá lại
-    const existed = await env.DB.prepare(
-      "SELECT type FROM feedback WHERE order_id=? LIMIT 1"
-    ).bind(orderId).first();
+        const order = await env.DB.prepare("SELECT * FROM orders WHERE id=?").bind(orderId).first();
+        if (!order) return withCors(bad("Not found", 404));
+        if (order.buyer_id !== u.userId) return withCors(bad("Forbidden", 403));
 
-    if (existed) return withCors(ok({ already: true, type: existed.type }));
+        try {
+          await env.DB.prepare(
+            `INSERT INTO feedback (order_id, buyer_id, seller_id, type, note, created_at)
+             VALUES (?, ?, ?, ?, ?, ?)`
+          )
+            .bind(orderId, u.userId, order.seller_id, type, note ? String(note) : null, Date.now())
+            .run();
+        } catch (e) {
+          console.error("FEEDBACK ERROR:", e);
+          return withCors(bad("Already feedbacked", 409));
+        }
 
-    const body = await readJson(req);
-    const type = String(body?.type || "");
-    if (!["trust", "scam"].includes(type)) return withCors(bad("Invalid type"));
+        if (type === "trust") {
+          await env.DB.prepare("UPDATE users SET reputation = reputation + 1, updated_at=? WHERE id=?")
+            .bind(Date.now(), order.seller_id)
+            .run();
+        } else {
+          await env.DB.prepare("UPDATE orders SET status='disputed' WHERE id=?").bind(orderId).run();
+        }
 
-    const now = Date.now();
-
-    await env.DB.prepare(`
-      INSERT INTO feedback (order_id, buyer_id, seller_id, type, note, created_at)
-      VALUES (?, ?, ?, ?, NULL, ?)
-    `).bind(orderId, order.buyer_id, order.seller_id, type, now).run();
-
-    // cộng uy tín nếu trust
-    if (type === "trust") {
-      await env.DB.prepare(
-        "UPDATE users SET reputation = reputation + 1, updated_at=? WHERE id=?"
-      ).bind(now, order.seller_id).run();
-    }
-
-    return withCors(ok({ ok: true }));
-  }
-}
-
+        return withCors(ok());
+      }
 
       // ===== ADMIN DECIDE WITHDRAW =====
 if (path.startsWith("/api/admin/withdrawals/") && path.endsWith("/decision") && req.method === "POST") {
@@ -1884,29 +1698,26 @@ if (path === "/api/withdraw" && req.method === "POST") {
   }));
 }
 
-// ===== SUBMIT CARD (THESIEURE) =====
+// ===== SUBMIT CARD (chargingws/v2) =====
+// Lưu ý:
+// - telco phải dạng VIETTEL / MOBIFONE / VINAPHONE / VNMOBI
+// - sign = md5(partner_key + code + command + partner_id + request_id + serial + telco)
 if (path === "/api/card/submit" && req.method === "POST") {
   const u = await requireAuth(req, env);
   if (!u) return withCors(bad("Unauthorized", 401));
 
   const body = await readJson(req);
-  const card = body?.card || body; // cho phép gửi flat hoặc {card:{}}
-
+  const card = body?.card;
   if (!card) return withCors(bad("Missing card info"));
 
-  let { type, amount, code, serial } = card;
+  const telco = normalizeTelco(card.type);
+  const amount = Number(card.amount);
+  const code = String(card.code || "").trim();
+  const serial = String(card.serial || "").trim();
 
-  type = String(type || "").trim();
-  code = String(code || "").trim();
-  serial = String(serial || "").trim();
-  amount = Number(amount || 0);
-
-  if (!type || !code || !serial || !Number.isFinite(amount) || amount <= 0) {
+  if (!telco || !code || !serial || !Number.isFinite(amount) || amount <= 0) {
     return withCors(bad("Invalid card data"));
   }
-
-  // normalize telco (thesieure thường dùng uppercase)
-  const telco = type.toUpperCase();
 
   // load settings
   const rows = await env.DB.prepare("SELECT key,value FROM system_settings").all();
@@ -1916,111 +1727,122 @@ if (path === "/api/card/submit" && req.method === "POST") {
   if ((s.card_provider || "thesieure") !== "thesieure") {
     return withCors(bad("Card provider not enabled"));
   }
-  if (!s.card_partner_id || !s.card_api_key) {
-    return withCors(bad("Missing card_partner_id / card_api_key in settings"));
-  }
-  if (!s.card_callback_domain) {
-    return withCors(bad("Missing card_callback_domain in settings"));
+
+  // card_partner_id = partner_id, card_api_key = partner_key (secret)
+  const partnerId = String(s.card_partner_id || "").trim();
+  const partnerKey = String(s.card_api_key || "").trim();
+  if (!partnerId || !partnerKey) {
+    return withCors(bad("Card settings missing (partner_id / partner_key)"));
   }
 
-  const gross = Math.round(amount); // VND
   const feePercent = Number(s.card_fee_percent || "0");
+  const gross = amount;
   const fee = Math.round(gross * (feePercent / 100));
   const net = Math.max(0, gross - fee);
 
   const depositId = crypto.randomUUID();
+  const requestId = depositId.replaceAll("-", "");
   const now = Date.now();
 
-  // 1) tạo deposit pending
+  // 1) tạo deposit pending (lưu requestId vào provider_txn_id để đối soát callback)
   await env.DB.prepare(
     `INSERT INTO deposits
-     (id, user_id, provider, gross_cents, fee_cents, net_cents, status, raw_payload, created_at, updated_at)
-     VALUES (?, ?, 'thesieure', ?, ?, ?, 'pending', NULL, ?, ?)`
+     (id, user_id, provider, gross_cents, fee_cents, net_cents, status, provider_txn_id, raw_payload, created_at, updated_at)
+     VALUES (?, ?, 'thesieure', ?, ?, ?, 'pending', ?, ?, ?, ?)`
   ).bind(
     depositId,
     u.userId,
-    gross * 100,
-    fee * 100,
-    net * 100,
+    Math.round(gross * 100),
+    Math.round(fee * 100),
+    Math.round(net * 100),
+    requestId,
+    JSON.stringify({
+      request_id: requestId,
+      telco,
+      amount: gross,
+      code_last4: code.slice(-4),
+      serial_last4: serial.slice(-4)
+    }),
     now,
     now
   ).run();
 
-  // 2) gọi API Thesieure (FORM URLENCODED + SIGN)
-  // request_id nên gọn, không dấu '-' để chắc ăn
-  const requestId = depositId.replace(/-/g, "");
-  const partnerId = String(s.card_partner_id);
-  const apiKey = String(s.card_api_key);
+  // 2) gọi API chargingws/v2
+  const command = "charging";
+  const sign = md5(partnerKey + code + command + partnerId + requestId + serial + telco);
 
-  // sign theo guide phổ biến: md5(partner_id + api_key + request_id)
-  const signRaw =
-  partnerId +
-  requestId +
-  telco +
-  String(gross) +
-  serial +
-  code +
-  apiKey;
+  const payload = {
+    partner_id: partnerId,
+    request_id: requestId,
+    telco,
+    amount: gross,
+    code,
+    serial,
+    command,
+    sign
+  };
 
-const sign = md5(signRaw);
+  // Một số bên cho set callback_url; nếu không hỗ trợ thì họ sẽ ignore.
+  const cbDomain = String(s.card_callback_domain || "").trim().replace(/^https?:\/\//i, "");
+  if (cbDomain) payload.callback_url = `https://${cbDomain}/api/webhooks/card`;
 
-
-  const callbackUrl = `https://${s.card_callback_domain}/api/webhooks/thesieure`;
-
-  const form = new URLSearchParams();
-  form.set("command", "charging");
-  form.set("partner_id", partnerId);
-  form.set("request_id", requestId);
-  form.set("telco", telco);
-  form.set("amount", String(gross));
-  form.set("serial", serial);
-  form.set("code", code);
-  form.set("sign", sign);
-  form.set("callback_url", callbackUrl);
-
-  let dataText = "";
   let data = null;
-
   try {
-    const resp = await fetch("https://thesieure.com/chargingws/v2", {
+    const resp = await fetch("https://napthesieure.vn/chargingws/v2", {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: form.toString()
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
     });
-
-    dataText = await resp.text();
-    try { data = JSON.parse(dataText); } catch { data = { raw: dataText }; }
-
+    data = await resp.json().catch(() => null);
   } catch (e) {
-    await env.DB.prepare(
-      "UPDATE deposits SET status='failed', raw_payload=?, updated_at=? WHERE id=?"
-    ).bind(JSON.stringify({ error: String(e) }), Date.now(), depositId).run();
-
-    return withCors(bad("Card gateway error"));
+    data = { status: -1, message: "FETCH_ERROR", detail: String(e?.message || e) };
   }
 
-  // log raw
+  // status thường: 1 (nhận thẻ) hoặc 99 (đang xử lý)
+  const st = Number(data?.status);
+  const accepted = st === 1 || st === 99;
+
   await env.DB.prepare(
     "UPDATE deposits SET raw_payload=?, updated_at=? WHERE id=?"
-  ).bind(JSON.stringify({ request_id: requestId, sent: Object.fromEntries(form), resp: data }), Date.now(), depositId).run();
+  ).bind(JSON.stringify({ submit: data }), Date.now(), depositId).run();
 
-  // Thesieure OK thường trả status=1
-  if (!data || Number(data.status) !== 1) {
+  if (!accepted) {
     await env.DB.prepare(
       "UPDATE deposits SET status='failed', updated_at=? WHERE id=?"
     ).bind(Date.now(), depositId).run();
 
-    return withCors(bad(data?.message || data?.msg || "INPUT_DATA_INCORRECT"));
+    return withCors(bad(data?.message || "Card rejected"));
   }
 
   return withCors(ok({
     deposit_id: depositId,
     request_id: requestId,
-    message: "Thẻ đã gửi, đang chờ xử lý"
+    message: data?.message || "Thẻ đã gửi, đang chờ xử lý"
   }));
 }
 
+async function depositCard() {
+  if (!card_type.value || !card_amount.value || !card_code.value || !card_serial.value)
+    return alert("Nhập đầy đủ thông tin thẻ");
 
+  const r = await apiPost("/api/card/submit", {
+    card: {
+      type: card_type.value,
+      amount: Number(card_amount.value),
+      code: card_code.value,
+      serial: card_serial.value
+    }
+  });
+
+  if (!r.ok) return alert(r.error || "Nạp thẻ thất bại");
+
+  card_out.innerHTML = `
+    <div class="note">
+      <b>Đã gửi thẻ thành công</b><br>
+      <p class="muted">Thẻ đang được xử lý, tiền sẽ vào ví sau vài giây.</p>
+    </div>
+  `;
+}
 
 // ===== MY DEPOSITS HISTORY =====
 if (path === "/api/my/deposits" && req.method === "GET") {
@@ -2205,6 +2027,198 @@ function ok(data = {}) {
 
 function bad(message, status = 400) {
   return json({ ok: false, error: message }, status);
+}
+
+// ============================
+// md5 (pure JS) – dùng để ký API nạp thẻ /chargingws/v2
+// WebCrypto trên Workers thường không có MD5 nên phải dùng bản JS.
+// ============================
+function md5(str) {
+  return hex(md51(String(str)));
+}
+
+function md51(s) {
+  const txt = "";
+  let n = s.length;
+  const state = [1732584193, -271733879, -1732584194, 271733878];
+  let i;
+  for (i = 64; i <= n; i += 64) {
+    md5cycle(state, md5blk(s.substring(i - 64, i)));
+  }
+  s = s.substring(i - 64);
+  const tail = new Array(16).fill(0);
+  for (i = 0; i < s.length; i++) tail[i >> 2] |= s.charCodeAt(i) << ((i % 4) << 3);
+  tail[i >> 2] |= 0x80 << ((i % 4) << 3);
+  if (i > 55) {
+    md5cycle(state, tail);
+    for (i = 0; i < 16; i++) tail[i] = 0;
+  }
+  // eslint-disable-next-line no-bitwise
+  tail[14] = n * 8;
+  md5cycle(state, tail);
+  return state;
+}
+
+function md5blk(s) {
+  const md5blks = [];
+  for (let i = 0; i < 64; i += 4) {
+    md5blks[i >> 2] =
+      s.charCodeAt(i) +
+      (s.charCodeAt(i + 1) << 8) +
+      (s.charCodeAt(i + 2) << 16) +
+      (s.charCodeAt(i + 3) << 24);
+  }
+  return md5blks;
+}
+
+function md5cycle(x, k) {
+  let a = x[0];
+  let b = x[1];
+  let c = x[2];
+  let d = x[3];
+
+  a = ff(a, b, c, d, k[0], 7, -680876936);
+  d = ff(d, a, b, c, k[1], 12, -389564586);
+  c = ff(c, d, a, b, k[2], 17, 606105819);
+  b = ff(b, c, d, a, k[3], 22, -1044525330);
+  a = ff(a, b, c, d, k[4], 7, -176418897);
+  d = ff(d, a, b, c, k[5], 12, 1200080426);
+  c = ff(c, d, a, b, k[6], 17, -1473231341);
+  b = ff(b, c, d, a, k[7], 22, -45705983);
+  a = ff(a, b, c, d, k[8], 7, 1770035416);
+  d = ff(d, a, b, c, k[9], 12, -1958414417);
+  c = ff(c, d, a, b, k[10], 17, -42063);
+  b = ff(b, c, d, a, k[11], 22, -1990404162);
+  a = ff(a, b, c, d, k[12], 7, 1804603682);
+  d = ff(d, a, b, c, k[13], 12, -40341101);
+  c = ff(c, d, a, b, k[14], 17, -1502002290);
+  b = ff(b, c, d, a, k[15], 22, 1236535329);
+
+  a = gg(a, b, c, d, k[1], 5, -165796510);
+  d = gg(d, a, b, c, k[6], 9, -1069501632);
+  c = gg(c, d, a, b, k[11], 14, 643717713);
+  b = gg(b, c, d, a, k[0], 20, -373897302);
+  a = gg(a, b, c, d, k[5], 5, -701558691);
+  d = gg(d, a, b, c, k[10], 9, 38016083);
+  c = gg(c, d, a, b, k[15], 14, -660478335);
+  b = gg(b, c, d, a, k[4], 20, -405537848);
+  a = gg(a, b, c, d, k[9], 5, 568446438);
+  d = gg(d, a, b, c, k[14], 9, -1019803690);
+  c = gg(c, d, a, b, k[3], 14, -187363961);
+  b = gg(b, c, d, a, k[8], 20, 1163531501);
+  a = gg(a, b, c, d, k[13], 5, -1444681467);
+  d = gg(d, a, b, c, k[2], 9, -51403784);
+  c = gg(c, d, a, b, k[7], 14, 1735328473);
+  b = gg(b, c, d, a, k[12], 20, -1926607734);
+
+  a = hh(a, b, c, d, k[5], 4, -378558);
+  d = hh(d, a, b, c, k[8], 11, -2022574463);
+  c = hh(c, d, a, b, k[11], 16, 1839030562);
+  b = hh(b, c, d, a, k[14], 23, -35309556);
+  a = hh(a, b, c, d, k[1], 4, -1530992060);
+  d = hh(d, a, b, c, k[4], 11, 1272893353);
+  c = hh(c, d, a, b, k[7], 16, -155497632);
+  b = hh(b, c, d, a, k[10], 23, -1094730640);
+  a = hh(a, b, c, d, k[13], 4, 681279174);
+  d = hh(d, a, b, c, k[0], 11, -358537222);
+  c = hh(c, d, a, b, k[3], 16, -722521979);
+  b = hh(b, c, d, a, k[6], 23, 76029189);
+  a = hh(a, b, c, d, k[9], 4, -640364487);
+  d = hh(d, a, b, c, k[12], 11, -421815835);
+  c = hh(c, d, a, b, k[15], 16, 530742520);
+  b = hh(b, c, d, a, k[2], 23, -995338651);
+
+  a = ii(a, b, c, d, k[0], 6, -198630844);
+  d = ii(d, a, b, c, k[7], 10, 1126891415);
+  c = ii(c, d, a, b, k[14], 15, -1416354905);
+  b = ii(b, c, d, a, k[5], 21, -57434055);
+  a = ii(a, b, c, d, k[12], 6, 1700485571);
+  d = ii(d, a, b, c, k[3], 10, -1894986606);
+  c = ii(c, d, a, b, k[10], 15, -1051523);
+  b = ii(b, c, d, a, k[1], 21, -2054922799);
+  a = ii(a, b, c, d, k[8], 6, 1873313359);
+  d = ii(d, a, b, c, k[15], 10, -30611744);
+  c = ii(c, d, a, b, k[6], 15, -1560198380);
+  b = ii(b, c, d, a, k[13], 21, 1309151649);
+  a = ii(a, b, c, d, k[4], 6, -145523070);
+  d = ii(d, a, b, c, k[11], 10, -1120210379);
+  c = ii(c, d, a, b, k[2], 15, 718787259);
+  b = ii(b, c, d, a, k[9], 21, -343485551);
+
+  x[0] = add32(a, x[0]);
+  x[1] = add32(b, x[1]);
+  x[2] = add32(c, x[2]);
+  x[3] = add32(d, x[3]);
+}
+
+function cmn(q, a, b, x, s, t) {
+  a = add32(add32(a, q), add32(x, t));
+  return add32((a << s) | (a >>> (32 - s)), b);
+}
+function ff(a, b, c, d, x, s, t) { return cmn((b & c) | (~b & d), a, b, x, s, t); }
+function gg(a, b, c, d, x, s, t) { return cmn((b & d) | (c & ~d), a, b, x, s, t); }
+function hh(a, b, c, d, x, s, t) { return cmn(b ^ c ^ d, a, b, x, s, t); }
+function ii(a, b, c, d, x, s, t) { return cmn(c ^ (b | ~d), a, b, x, s, t); }
+
+function hex(x) {
+  for (let i = 0; i < x.length; i++) x[i] = rhex(x[i]);
+  return x.join("");
+}
+
+function rhex(n) {
+  const s = "0123456789abcdef";
+  let j = 0;
+  let out = "";
+  for (; j < 4; j++) out += s.charAt((n >> (j * 8 + 4)) & 0x0f) + s.charAt((n >> (j * 8)) & 0x0f);
+  return out;
+}
+
+function add32(a, b) {
+  // eslint-disable-next-line no-bitwise
+  return (a + b) | 0;
+}
+
+function maskKeepLast4(v) {
+  const s = String(v ?? "").replace(/\s+/g, "");
+  if (s.length <= 4) return s;
+  return "*".repeat(Math.max(0, s.length - 4)) + s.slice(-4);
+}
+
+function normalizeTelco(input) {
+  const s = String(input ?? "").trim().toUpperCase();
+  if (s === "VIETTEL" || s === "VIETTEL TELECOM") return "VIETTEL";
+  if (s === "MOBIFONE" || s === "MOBI" || s === "MOBI FONE") return "MOBIFONE";
+  if (s === "VINAPHONE" || s === "VINA" || s === "VINA PHONE") return "VINAPHONE";
+  if (s === "VNMOBI" || s === "VIETNAMMOBILE" || s === "VIETNAM MOBILE") return "VNMOBI";
+  return s;
+}
+
+function normalizeCardStatus(v) {
+  const s = String(v ?? "").trim().toLowerCase();
+  if (!s) return "failed";
+  if (s === "success" || s === "paid" || s === "ok") return "success";
+  if (s === "pending" || s === "processing" || s === "wait" || s === "99") return "pending";
+  if (s === "failed" || s === "error" || s === "2" || s === "3" || s === "4") return "failed";
+  // nếu provider trả số
+  const n = Number(s);
+  if (Number.isFinite(n)) return n === 1 ? "success" : n === 99 ? "pending" : "failed";
+  return "failed";
+}
+
+function normalizeCallbackDomain(domain) {
+  let d = String(domain ?? "").trim();
+  if (!d) return "";
+  d = d.replace(/^https?:\/\//i, "");
+  d = d.replace(/\/+$/, "");
+  return d;
+}
+
+function safeJsonStringify(obj) {
+  try {
+    return JSON.stringify(obj ?? null);
+  } catch {
+    return "";
+  }
 }
 
 function getCookie(req, name) {
