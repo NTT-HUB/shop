@@ -15,6 +15,139 @@ export default {
       return new Response(res.body, { status: res.status, headers: h });
     };
 
+   // ===== MD5 (FULL) =====
+// Source: tiny JS md5 implementation (no deps)
+function md5(str) {
+  function cmn(q, a, b, x, s, t) {
+    a = add32(add32(a, q), add32(x, t));
+    return add32((a << s) | (a >>> (32 - s)), b);
+  }
+  function ff(a, b, c, d, x, s, t) { return cmn((b & c) | (~b & d), a, b, x, s, t); }
+  function gg(a, b, c, d, x, s, t) { return cmn((b & d) | (c & ~d), a, b, x, s, t); }
+  function hh(a, b, c, d, x, s, t) { return cmn(b ^ c ^ d, a, b, x, s, t); }
+  function ii(a, b, c, d, x, s, t) { return cmn(c ^ (b | ~d), a, b, x, s, t); }
+
+  function md5cycle(x, k) {
+    let [a, b, c, d] = x;
+
+    a = ff(a, b, c, d, k[0], 7, -680876936);
+    d = ff(d, a, b, c, k[1], 12, -389564586);
+    c = ff(c, d, a, b, k[2], 17, 606105819);
+    b = ff(b, c, d, a, k[3], 22, -1044525330);
+    a = ff(a, b, c, d, k[4], 7, -176418897);
+    d = ff(d, a, b, c, k[5], 12, 1200080426);
+    c = ff(c, d, a, b, k[6], 17, -1473231341);
+    b = ff(b, c, d, a, k[7], 22, -45705983);
+    a = ff(a, b, c, d, k[8], 7, 1770035416);
+    d = ff(d, a, b, c, k[9], 12, -1958414417);
+    c = ff(c, d, a, b, k[10], 17, -42063);
+    b = ff(b, c, d, a, k[11], 22, -1990404162);
+    a = ff(a, b, c, d, k[12], 7, 1804603682);
+    d = ff(d, a, b, c, k[13], 12, -40341101);
+    c = ff(c, d, a, b, k[14], 17, -1502002290);
+    b = ff(b, c, d, a, k[15], 22, 1236535329);
+
+    a = gg(a, b, c, d, k[1], 5, -165796510);
+    d = gg(d, a, b, c, k[6], 9, -1069501632);
+    c = gg(c, d, a, b, k[11], 14, 643717713);
+    b = gg(b, c, d, a, k[0], 20, -373897302);
+    a = gg(a, b, c, d, k[5], 5, -701558691);
+    d = gg(d, a, b, c, k[10], 9, 38016083);
+    c = gg(c, d, a, b, k[15], 14, -660478335);
+    b = gg(b, c, d, a, k[4], 20, -405537848);
+    a = gg(a, b, c, d, k[9], 5, 568446438);
+    d = gg(d, a, b, c, k[14], 9, -1019803690);
+    c = gg(c, d, a, b, k[3], 14, -187363961);
+    b = gg(b, c, d, a, k[8], 20, 1163531501);
+    a = gg(a, b, c, d, k[13], 5, -1444681467);
+    d = gg(d, a, b, c, k[2], 9, -51403784);
+    c = gg(c, d, a, b, k[7], 14, 1735328473);
+    b = gg(b, c, d, a, k[12], 20, -1926607734);
+
+    a = hh(a, b, c, d, k[5], 4, -378558);
+    d = hh(d, a, b, c, k[8], 11, -2022574463);
+    c = hh(c, d, a, b, k[11], 16, 1839030562);
+    b = hh(b, c, d, a, k[14], 23, -35309556);
+    a = hh(a, b, c, d, k[1], 4, -1530992060);
+    d = hh(d, a, b, c, k[4], 11, 1272893353);
+    c = hh(c, d, a, b, k[7], 16, -155497632);
+    b = hh(b, c, d, a, k[10], 23, -1094730640);
+    a = hh(a, b, c, d, k[13], 4, 681279174);
+    d = hh(d, a, b, c, k[0], 11, -358537222);
+    c = hh(c, d, a, b, k[3], 16, -722521979);
+    b = hh(b, c, d, a, k[6], 23, 76029189);
+    a = hh(a, b, c, d, k[9], 4, -640364487);
+    d = hh(d, a, b, c, k[12], 11, -421815835);
+    c = hh(c, d, a, b, k[15], 16, 530742520);
+    b = hh(b, c, d, a, k[2], 23, -995338651);
+
+    a = ii(a, b, c, d, k[0], 6, -198630844);
+    d = ii(d, a, b, c, k[7], 10, 1126891415);
+    c = ii(c, d, a, b, k[14], 15, -1416354905);
+    b = ii(b, c, d, a, k[5], 21, -57434055);
+    a = ii(a, b, c, d, k[12], 6, 1700485571);
+    d = ii(d, a, b, c, k[3], 10, -1894986606);
+    c = ii(c, d, a, b, k[10], 15, -1051523);
+    b = ii(b, c, d, a, k[1], 21, -2054922799);
+    a = ii(a, b, c, d, k[8], 6, 1873313359);
+    d = ii(d, a, b, c, k[15], 10, -30611744);
+    c = ii(c, d, a, b, k[6], 15, -1560198380);
+    b = ii(b, c, d, a, k[13], 21, 1309151649);
+    a = ii(a, b, c, d, k[4], 6, -145523070);
+    d = ii(d, a, b, c, k[11], 10, -1120210379);
+    c = ii(c, d, a, b, k[2], 15, 718787259);
+    b = ii(b, c, d, a, k[9], 21, -343485551);
+
+    x[0] = add32(a, x[0]);
+    x[1] = add32(b, x[1]);
+    x[2] = add32(c, x[2]);
+    x[3] = add32(d, x[3]);
+  }
+
+  function md51(s) {
+    const txt = unescape(encodeURIComponent(s));
+    const n = txt.length;
+    const state = [1732584193, -271733879, -1732584194, 271733878];
+    let i;
+
+    for (i = 64; i <= n; i += 64) {
+      md5cycle(state, md5blk(txt.substring(i - 64, i)));
+    }
+    const tail = new Array(16).fill(0);
+    const remaining = txt.substring(i - 64);
+    for (i = 0; i < remaining.length; i++) tail[i >> 2] |= remaining.charCodeAt(i) << ((i % 4) << 3);
+    tail[i >> 2] |= 0x80 << ((i % 4) << 3);
+    if (i > 55) { md5cycle(state, tail); for (i = 0; i < 16; i++) tail[i] = 0; }
+    tail[14] = n * 8;
+    md5cycle(state, tail);
+    return state;
+  }
+
+  function md5blk(s) {
+    const md5blks = [];
+    for (let i = 0; i < 64; i += 4) {
+      md5blks[i >> 2] =
+        s.charCodeAt(i) +
+        (s.charCodeAt(i + 1) << 8) +
+        (s.charCodeAt(i + 2) << 16) +
+        (s.charCodeAt(i + 3) << 24);
+    }
+    return md5blks;
+  }
+
+  function rhex(n) {
+    let s = "", j = 0;
+    for (; j < 4; j++) s += ("0" + ((n >> (j * 8 + 4)) & 0x0f).toString(16)).slice(-2) + ("0" + ((n >> (j * 8)) & 0x0f).toString(16)).slice(-2);
+    return s;
+  }
+
+  function hex(x) { return x.map(rhex).join(""); }
+  function add32(a, b) { return (a + b) & 0xffffffff; }
+
+  return hex(md51(str));
+}
+
+
     try {
       // -------- HEALTH / DEBUG --------
       if (path === "/api/health") {
@@ -1751,87 +1884,130 @@ if (path === "/api/withdraw" && req.method === "POST") {
   }));
 }
 
-// POST /api/card/submit
-// POST /api/card/submit
+// ===== SUBMIT CARD (THESIEURE) =====
 if (path === "/api/card/submit" && req.method === "POST") {
+  const u = await requireAuth(req, env);
+  if (!u) return withCors(bad("Unauthorized", 401));
+
+  const body = await readJson(req);
+  const card = body?.card || body; // cho phép gửi flat hoặc {card:{}}
+
+  if (!card) return withCors(bad("Missing card info"));
+
+  let { type, amount, code, serial } = card;
+
+  type = String(type || "").trim();
+  code = String(code || "").trim();
+  serial = String(serial || "").trim();
+  amount = Number(amount || 0);
+
+  if (!type || !code || !serial || !Number.isFinite(amount) || amount <= 0) {
+    return withCors(bad("Invalid card data"));
+  }
+
+  // normalize telco (thesieure thường dùng uppercase)
+  const telco = type.toUpperCase();
+
+  // load settings
+  const rows = await env.DB.prepare("SELECT key,value FROM system_settings").all();
+  const s = {};
+  for (const r of rows.results || []) s[r.key] = r.value;
+
+  if ((s.card_provider || "thesieure") !== "thesieure") {
+    return withCors(bad("Card provider not enabled"));
+  }
+  if (!s.card_partner_id || !s.card_api_key) {
+    return withCors(bad("Missing card_partner_id / card_api_key in settings"));
+  }
+  if (!s.card_callback_domain) {
+    return withCors(bad("Missing card_callback_domain in settings"));
+  }
+
+  const gross = Math.round(amount); // VND
+  const feePercent = Number(s.card_fee_percent || "0");
+  const fee = Math.round(gross * (feePercent / 100));
+  const net = Math.max(0, gross - fee);
+
+  const depositId = crypto.randomUUID();
+  const now = Date.now();
+
+  // 1) tạo deposit pending
+  await env.DB.prepare(
+    `INSERT INTO deposits
+     (id, user_id, provider, gross_cents, fee_cents, net_cents, status, raw_payload, created_at, updated_at)
+     VALUES (?, ?, 'thesieure', ?, ?, ?, 'pending', NULL, ?, ?)`
+  ).bind(
+    depositId,
+    u.userId,
+    gross * 100,
+    fee * 100,
+    net * 100,
+    now,
+    now
+  ).run();
+
+  // 2) gọi API Thesieure (FORM URLENCODED + SIGN)
+  // request_id nên gọn, không dấu '-' để chắc ăn
+  const requestId = depositId.replace(/-/g, "");
+  const partnerId = String(s.card_partner_id);
+  const apiKey = String(s.card_api_key);
+
+  // sign theo guide phổ biến: md5(partner_id + api_key + request_id)
+  const sign = md5(partnerId + apiKey + requestId);
+
+  const callbackUrl = `https://${s.card_callback_domain}/api/webhooks/thesieure`;
+
+  const form = new URLSearchParams();
+  form.set("command", "charging");
+  form.set("partner_id", partnerId);
+  form.set("request_id", requestId);
+  form.set("telco", telco);
+  form.set("amount", String(gross));
+  form.set("serial", serial);
+  form.set("code", code);
+  form.set("sign", sign);
+  form.set("callback_url", callbackUrl);
+
+  let dataText = "";
+  let data = null;
+
   try {
-    const u = await requireAuth(req, env);
-    if (!u) return withCors(bad("Unauthorized", 401));
-
-    const settings = await getSettings(env);
-    const partnerId = settings.card_partner_id;
-    const partnerKey = settings.card_api_key;
-
-    if (!partnerId || !partnerKey)
-      return withCors(bad("Card API not configured", 500));
-
-    const body = await readJson(req);
-    const card = body?.card || {};
-
-    const telco = String(card.type || "").toUpperCase();
-    const code = String(card.code || "").trim();
-    const serial = String(card.serial || "").trim();
-    const amount = Number(card.amount);
-
-    if (!telco || !code || !serial || !amount)
-      return withCors(bad("Missing card fields", 400));
-
-    const requestId = Date.now().toString();
-    const command = "charging";
-
-    // 🔑 SIGN ĐÚNG TÀI LIỆU
-    const signRaw = partnerKey + code + serial + telco + amount + requestId;
-    const sign = md5(signRaw);
-
-    // ❗ FORM URLENCODED – KHÔNG PHẢI JSON
-    const form = new URLSearchParams({
-      telco,
-      code,
-      serial,
-      amount,
-      partner_id: partnerId,
-      request_id: requestId,
-      command,
-      sign
-    });
-
-    const res = await fetch("https://thesieutoc.com/chargingws/v2", {
+    const resp = await fetch("https://thesieure.com/chargingws/v2", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded"
-      },
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: form.toString()
     });
 
-    const data = await res.json();
-
-    // status: 99 = pending
-    if (!data || data.status === undefined)
-      return withCors(bad("Invalid card response", 502));
-
-    // LƯU DB
-    const now = Date.now();
-    await env.DB.prepare(`
-      INSERT INTO deposits
-      (id, user_id, provider, gross_cents, fee_cents, net_cents, status, created_at)
-      VALUES (?, ?, 'card', ?, 0, ?, ?, ?)
-    `).bind(
-      crypto.randomUUID(),
-      u.userId,
-      amount * 100,
-      amount * 100,
-      data.status == 99 ? "pending" : "failed",
-      now
-    ).run();
-
-    return withCors(ok({
-      message: data.message,
-      status: data.status
-    }));
+    dataText = await resp.text();
+    try { data = JSON.parse(dataText); } catch { data = { raw: dataText }; }
 
   } catch (e) {
-    return withCors(bad("Server error", 500, e.message));
+    await env.DB.prepare(
+      "UPDATE deposits SET status='failed', raw_payload=?, updated_at=? WHERE id=?"
+    ).bind(JSON.stringify({ error: String(e) }), Date.now(), depositId).run();
+
+    return withCors(bad("Card gateway error"));
   }
+
+  // log raw
+  await env.DB.prepare(
+    "UPDATE deposits SET raw_payload=?, updated_at=? WHERE id=?"
+  ).bind(JSON.stringify({ request_id: requestId, sent: Object.fromEntries(form), resp: data }), Date.now(), depositId).run();
+
+  // Thesieure OK thường trả status=1
+  if (!data || Number(data.status) !== 1) {
+    await env.DB.prepare(
+      "UPDATE deposits SET status='failed', updated_at=? WHERE id=?"
+    ).bind(Date.now(), depositId).run();
+
+    return withCors(bad(data?.message || data?.msg || "INPUT_DATA_INCORRECT"));
+  }
+
+  return withCors(ok({
+    deposit_id: depositId,
+    request_id: requestId,
+    message: "Thẻ đã gửi, đang chờ xử lý"
+  }));
 }
 
 
