@@ -1544,6 +1544,89 @@ if (path.startsWith("/api/admin/withdrawals/") && path.endsWith("/decision") && 
   return withCors(bad("Invalid action"));
 }
 
+// POST /api/webhooks/card  (Thesieure callback)
+if (path === "/api/webhooks/card" && req.method === "POST") {
+  try {
+    // Thesieure thường gửi form-data (x-www-form-urlencoded)
+    const ct = req.headers.get("content-type") || "";
+    let data = {};
+
+    if (ct.includes("application/json")) {
+      data = await req.json();
+    } else {
+      const form = await req.formData();
+      for (const [k, v] of form.entries()) data[k] = String(v);
+    }
+
+    // Lấy settings
+    const partnerIdRow = await env.DB.prepare(
+      "SELECT value FROM system_settings WHERE key='card_partner_id'"
+    ).first();
+    const partnerKeyRow = await env.DB.prepare(
+      "SELECT value FROM system_settings WHERE key='card_api_key'"
+    ).first();
+
+    const partnerKey = partnerKeyRow?.value || "";
+    if (!partnerKey) return withCors(bad("Missing partner key", 500));
+
+    // Verify signature (đang dùng giống submit: md5(partnerKey + code + serial))
+    const code = data.code || "";
+    const serial = data.serial || "";
+    const sign = data.sign || data.signature || "";
+    const mySign = md5(partnerKey + code + serial);
+
+    if (!sign || sign !== mySign) {
+      return withCors(bad("INVALID_SIGNATURE", 400));
+    }
+
+    // request_id bạn gửi khi submit
+    const requestId = data.request_id || data.requestId || data.trans_id || "";
+    if (!requestId) return withCors(bad("Missing request_id", 400));
+
+    // status tuỳ Thesieure: success/failed/pending...
+    const statusRaw = (data.status || data.status_card || "").toLowerCase();
+
+    // map status
+    let newStatus = "pending";
+    if (statusRaw.includes("success") || statusRaw === "1") newStatus = "success";
+    if (statusRaw.includes("fail") || statusRaw === "0") newStatus = "failed";
+
+    // value/amount (mệnh giá thực nhận từ nhà mạng)
+    const value = Number(String(data.value || data.amount || "0").replace(/\D/g, ""));
+    const grossCents = Math.max(0, value) * 100;
+
+    // fee % lấy từ settings
+    const feeRow = await env.DB.prepare(
+      "SELECT value FROM system_settings WHERE key='card_fee_percent'"
+    ).first();
+    const feePercent = Number(feeRow?.value || 0);
+    const feeCents = Math.round(grossCents * (feePercent / 100));
+    const netCents = Math.max(0, grossCents - feeCents);
+
+    // Update deposits theo request_id (bạn nhớ lúc submit đã INSERT request_id vào deposits)
+    await env.DB.prepare(`
+      UPDATE deposits
+      SET gross_cents=?, fee_cents=?, net_cents=?, status=?, updated_at=?
+      WHERE id=? OR provider_ref=?
+    `).bind(
+      grossCents, feeCents, netCents, newStatus, Date.now(),
+      requestId, requestId
+    ).run();
+
+    // Nếu success thì cộng ví (nếu bạn muốn cộng ở callback)
+    // (tuỳ bạn thiết kế: có nơi cộng ngay lúc callback success)
+    // -- Ví dụ (cần join deposits để lấy user_id):
+    // const dep = await env.DB.prepare("SELECT user_id FROM deposits WHERE id=? OR provider_ref=?")
+    //   .bind(requestId, requestId).first();
+    // if (newStatus === "success" && dep?.user_id) { ... cộng wallets ... }
+
+    // Thesieure thường chỉ cần trả "OK"
+    return withCors(new Response("OK", { status: 200 }));
+  } catch (e) {
+    return withCors(bad("Server error", 500));
+  }
+}
+
 
 // ===== ADMIN LIST WITHDRAWALS =====
 if (path === "/api/admin/withdrawals" && req.method === "GET") {
