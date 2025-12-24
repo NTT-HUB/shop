@@ -146,6 +146,14 @@ function md5(str) {
 
   return hex(md51(str));
 }
+  function normalizeCardProvider(p) {
+    const s = String(p || "").trim().toLowerCase();
+    if (!s) return "thesieure";
+    // admin hay nhập domain: thesieure.com -> vẫn coi là thesieure
+    if (s === "thesieure" || s === "thesieure.com" || s.includes("thesieure")) return "thesieure";
+    return s;
+  }
+
 
 
     try {
@@ -1215,27 +1223,26 @@ if (path === "/api/admin/settings" && req.method === "POST") {
 
   // chỉ cho update whitelist key
 const allow = new Set([
-  // ===== SITE =====
   "site_name",
   "site_tagline",
 
-  // ===== FEE =====
   "bank_fee_percent",
   "card_fee_percent",
 
-  // ===== BANK INFO (HIỂN THỊ) =====
-  "bank_name",              // 👈 TÊN NGÂN HÀNG
-  "bank_account_name",      // 👈 CHỦ TÀI KHOẢN
+  "bank_code",
+  "bank_name",
+  "bank_account_name",
+  "bank_account_number",
+  "bank_transfer_prefix",
 
-  // ===== WEB2M =====
   "web2m_token",
-  "web2m_bank_account",     // 👈 SỐ TÀI KHOẢN
+  "web2m_bank_account",
   "web2m_prefix",
 
-  // ===== CARD =====
   "card_provider",
-  "card_api_key",
   "card_partner_id",
+  "card_partner_key",
+  "card_api_key",
   "card_callback_domain"
 ]);
 
@@ -1320,9 +1327,12 @@ if (path === "/api/deposits/create" && req.method === "POST") {
   /* ================= CREATE DEPOSIT ================= */
   const id = crypto.randomUUID();
   const now = Date.now();
-  const provider = method === "bank"
-    ? "bank_manual"
-    : (s.card_provider || "thesieure");
+  const provider = method === "bank"    ? "bank_manual"
+    : normalizeCardProvider(s.card_provider || "thesieure");
+
+  if (method !== "bank" && provider !== "thesieure") {
+    return withCors(bad("Card provider not enabled", 400));
+  }
 
   await env.DB.prepare(
     `INSERT INTO deposits
@@ -1919,7 +1929,8 @@ if (path === "/api/withdraw" && req.method === "POST") {
 
         // load settings
         const s = await getSettings(env);
-        const cardProvider = String(s.card_provider || "thesieure").trim() || "thesieure";
+        const cardProvider = normalizeCardProvider(s.card_provider || "thesieure");
+        if (cardProvider !== "thesieure") return withCors(bad("Card provider not enabled", 400));
         const partnerId = String(s.card_partner_id || "").trim();
         // backward compatible: some UI calls it api_key but it is actually partner_key
         const partnerKey = String(s.card_partner_key || s.card_api_key || "").trim();
