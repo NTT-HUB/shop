@@ -1,6 +1,6 @@
 export default {
   async fetch(req, env) {
-    // ===== CORS =====
+   
     if (req.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders(req) });
     }
@@ -15,8 +15,6 @@ export default {
       return new Response(res.body, { status: res.status, headers: h });
     };
 
-   // ===== MD5 (FULL) =====
-// Source: tiny JS md5 implementation (no deps)
 function md5(str) {
   function cmn(q, a, b, x, s, t) {
     a = add32(add32(a, q), add32(x, t));
