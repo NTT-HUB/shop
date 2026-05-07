@@ -10,6 +10,5 @@ database_id = "8e5789d0-d871-45a2-bf01-9321063b8097"
 [vars]
 SESSION_MAX_AGE_SEC = "2592000"
 
-# ⚠️ SECRET ĐỂ THẲNG (KHÔNG KHUYÊN – NHƯNG OK)
 PASSWORD_PEPPER = "pepper_random_dai_it_nhat_32_ky_tu_123456789"
 AES_SECRET = "aes_secret_random_dai_it_nhat_32_ky_tu_987654321"
