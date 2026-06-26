@@ -766,6 +766,22 @@ function safeKeyDuration(v) {
   const n = Number(v);
   return VALID_KEY_DURATIONS.includes(n) ? n : 86400;
 }
+
+const MAX_FLOW_STEPS = 8;
+function clampAdSteps(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 1;
+  return Math.max(1, Math.min(MAX_FLOW_STEPS, Math.floor(n)));
+}
+function stepValue(obj, n, field, fallback = '') {
+  return obj?.[`step${n}_${field}`] ?? fallback;
+}
+function stepTypeValue(obj, n) {
+  return stepValue(obj, n, 'type', 'linkvertise') || 'linkvertise';
+}
+function progressStepStartAt(progress, n) {
+  return Number(progress?.[`step${n}_start_at`] || 0);
+}
 function normalizeItemName(name, fallback) {
   const n = String(name || "").trim();
   return n ? n.slice(0, 60) : fallback;
@@ -867,8 +883,8 @@ async function handleRequest(request, env, ctx) {
     } catch {}
 
     await env.DB.prepare(
-      `INSERT INTO progress (hwid, ostime, start, step1, step2, created_at) VALUES (?, ?, 0, 0, 0, ?)
-       ON CONFLICT(hwid) DO UPDATE SET ostime=excluded.ostime, start=0, step1=0, step2=0, created_at=excluded.created_at`
+      `INSERT INTO progress (hwid, ostime, start, step1, step2, step3, step4, step5, step6, step7, step8, created_at) VALUES (?, ?, 0, 0, 0, 0, 0, 0, 0, 0, 0, ?)
+       ON CONFLICT(hwid) DO UPDATE SET ostime=excluded.ostime, start=0, step1=0, step2=0, step3=0, step4=0, step5=0, step6=0, step7=0, step8=0, created_at=excluded.created_at`
     ).bind(hwid, ostime, now).run();
 
     return json({ status: true, message: "initialized" }, request);
@@ -880,9 +896,21 @@ async function handleRequest(request, env, ctx) {
     if (!hwid) return json({ status: false, error: "missing_hwid" }, 400, request);
 
     const row = await env.DB.prepare("SELECT * FROM progress WHERE hwid = ? AND flow_id = ?").bind(hwid, flowId).first();
-    if (!row) return json({ status: false, start: false, step1: false, step2: false }, 200, request);
+    if (!row) {
+      const empty = { status: false, start: false };
+      for (let i = 1; i <= MAX_FLOW_STEPS; i++) {
+        empty[`step${i}`] = false;
+        empty[`step${i}_start_at`] = null;
+      }
+      return json(empty, 200, request);
+    }
 
-    return json({ status: true, hwid: row.hwid, start: !!row.start, step1: !!row.step1, step2: !!row.step2, step1_start_at: row.step1_start_at || null, step2_start_at: row.step2_start_at || null }, request);
+    const out = { status: true, hwid: row.hwid, start: !!row.start };
+    for (let i = 1; i <= MAX_FLOW_STEPS; i++) {
+      out[`step${i}`] = !!row[`step${i}`];
+      out[`step${i}_start_at`] = row[`step${i}_start_at`] || null;
+    }
+    return json(out, request);
   }
 
   if (type === "data") {
@@ -1319,26 +1347,25 @@ async function handleRequest(request, env, ctx) {
 
     let { hwid, step, flow_id } = body;
     if (hwid) hwid = hwid.replace(/ /g, "+");
-    if (!hwid || !step) return json({ success: false, error: "Missing params" }, 400, request);
+    const stepNum = Number(step);
+    if (!hwid || !Number.isInteger(stepNum) || stepNum < 1 || stepNum > MAX_FLOW_STEPS)
+      return json({ success: false, error: "Invalid step" }, 400, request);
 
     const flowKey = flow_id ? String(flow_id) : "default";
     const now = Math.floor(Date.now() / 1000);
+    const col = `step${stepNum}_start_at`;
 
-    const col = step === 1 ? "step1_start_at" : step === 2 ? "step2_start_at" : null;
-    if (!col) return json({ success: false, error: "Invalid step" }, 400, request);
-
-    // User phải bấm Start và pass captcha trước khi bắt đầu Step 1/2.
-    const existing = await env.DB.prepare("SELECT start, step1 FROM progress WHERE hwid = ? AND flow_id = ?").bind(hwid, flowKey).first();
+    const existing = await env.DB.prepare("SELECT * FROM progress WHERE hwid = ? AND flow_id = ?").bind(hwid, flowKey).first();
     if (!existing || !existing.start) {
       return json({ success: false, error: "start_required", message: "Please complete captcha first" }, 403, request);
     }
-    if (step === 2 && !existing.step1) {
-      return json({ success: false, error: "step1_required", message: "Please complete step 1 first" }, 403, request);
+    if (stepNum > 1 && !existing[`step${stepNum - 1}`]) {
+      return json({ success: false, error: `step${stepNum - 1}_required`, message: `Please complete step ${stepNum - 1} first` }, 403, request);
     }
 
     await env.DB.prepare(`UPDATE progress SET ${col} = ? WHERE hwid = ? AND flow_id = ?`).bind(now, hwid, flowKey).run();
 
-    return json({ success: true }, request);
+    return json({ success: true });
   }
 
   if (type === "save_captcha_type") {
@@ -1468,21 +1495,22 @@ async function handleRequest(request, env, ctx) {
     if (!hwid || !step || !domain) return json({ success: false, error: "Missing params" }, 400, request);
     if (hwid.length > 200) return json({ success: false, error: "Invalid hwid" }, 400, request);
 
+    const isStartStep = step === "start";
+    const stepNum = isStartStep ? 0 : Number(step);
+    if (!isStartStep && (!Number.isInteger(stepNum) || stepNum < 1 || stepNum > MAX_FLOW_STEPS))
+      return json({ success: false, error: "Invalid step" }, 400, request);
+
     let flowKey = flow_id ? String(flow_id) : "default";
 
-    if (step === "start") {
+    if (isStartStep) {
       if (!captcha_token) return json({ success: false, error: "captcha_required" }, 403, request);
       const ct = await env.DB.prepare("SELECT * FROM captcha_sessions WHERE id = ?").bind(captcha_token).first();
       if (!ct || !ct.used || ct.hwid !== hwid) return json({ success: false, error: "invalid_captcha_token" }, 403, request);
       await env.DB.prepare("DELETE FROM captcha_sessions WHERE id = ?").bind(captcha_token).run();
     }
 
-    const userSettings = await env.DB.prepare(
-      "SELECT * FROM user_settings WHERE website_domain = ?"
-    ).bind(domain).first();
-
-    if (!userSettings)
-      return json({ success: false, error: "domain_not_found" }, 404, request);
+    const userSettings = await env.DB.prepare("SELECT * FROM user_settings WHERE website_domain = ?").bind(domain).first();
+    if (!userSettings) return json({ success: false, error: "domain_not_found" }, 404, request);
 
     if ((!flow_id || flowKey === "default") && key_id) {
       const keyItem = await env.DB.prepare("SELECT flow_id FROM key_links WHERE user_id = ? AND item_id = ?")
@@ -1498,39 +1526,21 @@ async function handleRequest(request, env, ctx) {
       flowKey = String(shortItem.flow_id || "default");
     }
 
-    // Merge flow settings nếu có flow_id
-    let effectiveStep1Type = userSettings.step1_type || "linkvertise";
-    let effectiveStep2Type = userSettings.step2_type || "linkvertise";
+    const effectiveStepTypes = {};
+    for (let i = 1; i <= MAX_FLOW_STEPS; i++) effectiveStepTypes[i] = stepTypeValue(userSettings, i);
     if (flowKey !== "default") {
       const flowRow = await env.DB.prepare("SELECT * FROM user_flows WHERE user_id = ? AND flow_id = ?")
         .bind(userSettings.user_id, flowKey).first();
-      if (flowRow) {
-        effectiveStep1Type = flowRow.step1_type || "linkvertise";
-        effectiveStep2Type = flowRow.step2_type || "linkvertise";
-      }
+      if (flowRow) for (let i = 1; i <= MAX_FLOW_STEPS; i++) effectiveStepTypes[i] = stepTypeValue(flowRow, i);
     }
 
-    const stepType = step === 1 ? effectiveStep1Type
-                   : step === 2 ? effectiveStep2Type
-                   : "system_start";
-
-    // Thời gian theo platform
+    const stepType = isStartStep ? "captcha_start" : (effectiveStepTypes[stepNum] || "linkvertise");
     const PLATFORM_SECS = (t) => t === "lootlab" ? 60 : t === "workink" ? 30 : t === "youtube" ? 15 : 10;
-
     const effectiveBestTimeEnabled = userSettings.best_time_enabled || 0;
 
-    // bypassSeconds cho complete_step (check từng bước riêng lẻ)
-    // Khi best_time bật: vẫn dùng platform secs cho từng bước (check tổng ở create_key)
-    // Khi tắt: dùng 25s cố định
-    const bypassSeconds = effectiveBestTimeEnabled === 1
-      ? PLATFORM_SECS(stepType)
-      : 25;
-
-    if (step === "start") {
-      // Start không còn là bước ads/admin nữa.
-      // Chỉ cần captcha_token đã được verify ở captcha_verify.
+    if (isStartStep) {
+      // Start chỉ xác thực captcha, không còn là ads/admin step.
     } else if (stepType === "linkvertise") {
-      // Linkvertise step bắt buộc có token + hash hợp lệ, không fallback qua timer.
       if (!userSettings.linkvertise_token?.trim()) return json({ success: false, error: "missing_linkvertise_token" }, 403, request);
       if (!hash || hash.length < 10) return json({ success: false, error: "missing_hash" }, 403, request);
       const valid = await checkLinkvertiseHash(hash, userSettings.linkvertise_token, ua);
@@ -1538,55 +1548,44 @@ async function handleRequest(request, env, ctx) {
     }
 
     const now = Math.floor(Date.now() / 1000);
-
     let progress = await env.DB.prepare("SELECT * FROM progress WHERE hwid = ? AND flow_id = ?").bind(hwid, flowKey).first();
 
     if (!progress) {
       const defaultP = await env.DB.prepare("SELECT created_at FROM progress WHERE hwid = ? AND flow_id = 'default'").bind(hwid).first();
       const initTime = defaultP?.created_at || now;
       await env.DB.prepare(
-        "INSERT INTO progress (hwid, ostime, start, step1, step2, created_at, flow_id) VALUES (?, ?, 0, 0, 0, ?, ?)"
+        `INSERT INTO progress (hwid, ostime, start, step1, step2, step3, step4, step5, step6, step7, step8, created_at, flow_id)
+         VALUES (?, ?, 0, 0, 0, 0, 0, 0, 0, 0, 0, ?, ?)`
       ).bind(hwid, now, initTime, flowKey).run();
-      progress = { created_at: initTime, start: 0, step1: 0, step2: 0 };
+      progress = { created_at: initTime, start: 0 };
+      for (let i = 1; i <= MAX_FLOW_STEPS; i++) progress[`step${i}`] = 0;
     }
 
-    // User phải pass captcha Start trước khi hoàn tất Step 1/2.
-    if ((step === 1 || step === 2) && !progress.start) {
+    if (!isStartStep && !progress.start) {
       return json({ success: false, error: "start_required", message: "Please complete captcha first" }, 403, request);
     }
-    if (step === 2 && !progress.step1) {
-      return json({ success: false, error: "step1_required", message: "Please complete step 1 first" }, 403, request);
+    if (!isStartStep && stepNum > 1 && !progress[`step${stepNum - 1}`]) {
+      return json({ success: false, error: `step${stepNum - 1}_required`, message: `Please complete step ${stepNum - 1} first` }, 403, request);
     }
 
-    // Bypass check dùng step_start_at (lúc user bấm nút)
-    if (step === 1 || step === 2) {
-      const sType    = step === 1 ? effectiveStep1Type : effectiveStep2Type;
-      const hasToken = sType === "linkvertise" && userSettings.linkvertise_token?.trim();
+    if (!isStartStep) {
+      const hasToken = stepType === "linkvertise" && userSettings.linkvertise_token?.trim();
       if (!hasToken) {
-        const bypassSecs = effectiveBestTimeEnabled === 1
-          ? PLATFORM_SECS(sType)
-          : 25;
-        const startAt = step === 1 ? progress.step1_start_at : progress.step2_start_at;
-        if (!startAt) {
-          return json({ success: false, error: "bypass_detected", message: "Please click the step button first" }, 403, request);
-        }
+        const bypassSecs = effectiveBestTimeEnabled === 1 ? PLATFORM_SECS(stepType) : 25;
+        const startAt = progressStepStartAt(progress, stepNum);
+        if (!startAt) return json({ success: false, error: "bypass_detected", message: "Please click the step button first" }, 403, request);
         const elapsed = now - startAt;
         if (elapsed < bypassSecs) {
-          const resetSql = step === 1
-            ? "UPDATE progress SET step1 = 0, step1_start_at = NULL WHERE hwid = ? AND flow_id = ?"
-            : "UPDATE progress SET step2 = 0, step2_start_at = NULL WHERE hwid = ? AND flow_id = ?";
-          await env.DB.prepare(resetSql).bind(hwid, flowKey).run();
+          await env.DB.prepare(`UPDATE progress SET step${stepNum} = 0, step${stepNum}_start_at = NULL WHERE hwid = ? AND flow_id = ?`).bind(hwid, flowKey).run();
           return json({ success: false, error: "bypass_detected", message: "Too fast, please try again" }, 403, request);
         }
       }
     }
 
-    if (step === "start") {
+    if (isStartStep) {
       await env.DB.prepare("UPDATE progress SET start = 1, created_at = ? WHERE hwid = ? AND flow_id = ?").bind(now, hwid, flowKey).run();
-    } else if (step === 1) {
-      await env.DB.prepare("UPDATE progress SET start = 1, step1 = 1, step1_at = ? WHERE hwid = ? AND flow_id = ?").bind(now, hwid, flowKey).run();
-    } else if (step === 2) {
-      await env.DB.prepare("UPDATE progress SET start = 1, step1 = 1, step2 = 1, step2_at = ? WHERE hwid = ? AND flow_id = ?").bind(now, hwid, flowKey).run();
+    } else {
+      await env.DB.prepare(`UPDATE progress SET start = 1, step${stepNum} = 1, step${stepNum}_at = ? WHERE hwid = ? AND flow_id = ?`).bind(now, hwid, flowKey).run();
     }
 
     return json({ success: true, message: `Step ${step} completed` }, request);
@@ -1624,15 +1623,14 @@ async function handleRequest(request, env, ctx) {
       return json({ success: false, error: "No progress found. Please complete the steps." }, 403, request);
 
     // Merge flow settings nếu có flow_id. Key duration belongs to key_links now.
-    let effectiveSettings = { ...settings };
+    let effectiveSettings = { ...settings, ad_steps: clampAdSteps(settings.ad_steps) };
     let keyTtl = keyItem ? safeKeyDuration(keyItem.key_duration) : 86400;
     if (flowKey !== "default") {
       const flowRow = await env.DB.prepare("SELECT * FROM user_flows WHERE user_id = ? AND flow_id = ?")
         .bind(settings.user_id, flowKey).first();
       if (flowRow) {
-        effectiveSettings.ad_steps    = flowRow.ad_steps;
-        effectiveSettings.step1_type  = flowRow.step1_type;
-        effectiveSettings.step2_type  = flowRow.step2_type;
+        effectiveSettings.ad_steps = clampAdSteps(flowRow.ad_steps);
+        for (let i = 1; i <= MAX_FLOW_STEPS; i++) effectiveSettings[`step${i}_type`] = stepTypeValue(flowRow, i);
         if (!keyItem) keyTtl = safeKeyDuration(flowRow.key_duration);
       } else {
         return json({ success: false, error: "flow_not_found" }, 404, request);
@@ -1641,30 +1639,21 @@ async function handleRequest(request, env, ctx) {
 
     const now = Math.floor(Date.now() / 1000);
 
-    // ── Best Time Anti-Bypass: tính tổng time từ platform type ──
+    // ── Best Time Anti-Bypass: tổng thời gian theo số step ads thật ──
+    const requiredSteps = clampAdSteps(effectiveSettings.ad_steps);
     if (settings.best_time_enabled === 1) {
       const PSECS = (t) => t === "lootlab" ? 60 : t === "workink" ? 30 : t === "youtube" ? 15 : 10;
-
-      // Lấy system start type
-      const sys      = await env.DB.prepare("SELECT start_type FROM system_settings WHERE id = 1").first();
-      const sysType  = sys?.start_type || "linkvertise";
-      const startSec = PSECS(sysType);
-      const step1Sec = PSECS(effectiveSettings.step1_type || "linkvertise");
-      const step2Sec = PSECS(effectiveSettings.step2_type || "linkvertise");
-
-      const totalRequired = startSec + step1Sec + (effectiveSettings.ad_steps === 2 ? step2Sec : 0);
-      const elapsed       = now - (progress.created_at || now);
-
+      let totalRequired = 0;
+      for (let i = 1; i <= requiredSteps; i++) totalRequired += PSECS(effectiveSettings[`step${i}_type`] || "linkvertise");
+      const elapsed = now - (progress.created_at || now);
       if (elapsed < totalRequired) {
         return json({ success: false, error: "bypass_detected", message: `Flow completed too fast (${elapsed}s < ${totalRequired}s required)` }, 403, request);
       }
     }
 
-    if (!progress.step1)
-      return json({ success: false, error: "Step 1 not completed" }, 403, request);
-
-    if (effectiveSettings.ad_steps === 2 && !progress.step2)
-      return json({ success: false, error: "Step 2 not completed" }, 403, request);
+    for (let i = 1; i <= requiredSteps; i++) {
+      if (!progress[`step${i}`]) return json({ success: false, error: `Step ${i} not completed` }, 403, request);
+    }
 
     const keyId     = Math.random().toString().slice(2, 9);
     const keyPrefix = (settings.key_domain || "KEY").toUpperCase();
@@ -1970,20 +1959,22 @@ async function handleRequest(request, env, ctx) {
     let body;
     try { body = await request.json(); }
     catch { return json({ success: false, error: "Invalid JSON" }, 400, request); }
-
-    const { user_id, flow_id, ad_steps, step1_type, step1_link, step1_yt_links, step2_type, step2_link, step2_yt_links } = body;
+    const { user_id, flow_id, ad_steps } = body;
     if (!user_id || !flow_id) return json({ success: false, error: "Missing params" }, 400, request);
-
     const auth = await requireAuthUser(request, user_id);
     if (auth.response) return auth.response;
-
-    const safeSteps = Number(ad_steps) === 2 ? 2 : 1;
+    const safeSteps = clampAdSteps(ad_steps);
     const forcedName = `Flow ${flow_id}`;
     const now = Math.floor(Date.now() / 1000);
-
+    const stepValues = [];
+    for (let i = 1; i <= MAX_FLOW_STEPS; i++) {
+      stepValues.push(body[`step${i}_type`] || "linkvertise");
+      stepValues.push(body[`step${i}_link`] || "");
+      stepValues.push(body[`step${i}_yt_links`] || "[]");
+    }
     await env.DB.prepare(`
-      INSERT INTO user_flows (user_id, flow_id, name, ad_steps, step1_type, step1_link, step1_yt_links, step2_type, step2_link, step2_yt_links, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO user_flows (user_id, flow_id, name, ad_steps, step1_type, step1_link, step1_yt_links, step2_type, step2_link, step2_yt_links, step3_type, step3_link, step3_yt_links, step4_type, step4_link, step4_yt_links, step5_type, step5_link, step5_yt_links, step6_type, step6_link, step6_yt_links, step7_type, step7_link, step7_yt_links, step8_type, step8_link, step8_yt_links, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(user_id, flow_id) DO UPDATE SET
         name           = excluded.name,
         ad_steps       = excluded.ad_steps,
@@ -1993,20 +1984,27 @@ async function handleRequest(request, env, ctx) {
         step2_type     = excluded.step2_type,
         step2_link     = excluded.step2_link,
         step2_yt_links = excluded.step2_yt_links,
+        step3_type     = excluded.step3_type,
+        step3_link     = excluded.step3_link,
+        step3_yt_links = excluded.step3_yt_links,
+        step4_type     = excluded.step4_type,
+        step4_link     = excluded.step4_link,
+        step4_yt_links = excluded.step4_yt_links,
+        step5_type     = excluded.step5_type,
+        step5_link     = excluded.step5_link,
+        step5_yt_links = excluded.step5_yt_links,
+        step6_type     = excluded.step6_type,
+        step6_link     = excluded.step6_link,
+        step6_yt_links = excluded.step6_yt_links,
+        step7_type     = excluded.step7_type,
+        step7_link     = excluded.step7_link,
+        step7_yt_links = excluded.step7_yt_links,
+        step8_type     = excluded.step8_type,
+        step8_link     = excluded.step8_link,
+        step8_yt_links = excluded.step8_yt_links,
         updated_at     = excluded.updated_at
-    `).bind(
-      user_id, String(flow_id), forcedName, safeSteps,
-      step1_type || "linkvertise", step1_link || "", step1_yt_links || "[]",
-      step2_type || "linkvertise", step2_link || "", step2_yt_links || "[]",
-      now, now
-    ).run();
-
-    try {
-      await env.DB.prepare(
-        "UPDATE key_daily_stats SET flow_name = ? WHERE user_id = ? AND flow_id = ?"
-      ).bind(forcedName, user_id, String(flow_id)).run();
-    } catch {}
-
+    `).bind(user_id, String(flow_id), forcedName, safeSteps, ...stepValues, now, now).run();
+    try { await env.DB.prepare("UPDATE key_daily_stats SET flow_name = ? WHERE user_id = ? AND flow_id = ?").bind(forcedName, user_id, String(flow_id)).run(); } catch {}
     return json({ success: true, message: "Flow saved", flow: { flow_id: String(flow_id), name: forcedName, ad_steps: safeSteps } }, request);
   }
 
@@ -2206,13 +2204,15 @@ async function handleRequest(request, env, ctx) {
     const flowKey = String(item.flow_id || "default");
     const progress = await env.DB.prepare("SELECT * FROM progress WHERE hwid = ? AND flow_id = ?")
       .bind(hwid, flowKey).first();
-    if (!progress || !progress.step1) return json({ success: false, error: "Step 1 not completed" }, 403, request);
+    if (!progress) return json({ success: false, error: "No progress found. Please complete the steps." }, 403, request);
 
     let adSteps = 1;
     const flow = await env.DB.prepare("SELECT ad_steps FROM user_flows WHERE user_id = ? AND flow_id = ?")
       .bind(settings.user_id, flowKey).first();
-    if (flow) adSteps = Number(flow.ad_steps || 1);
-    if (adSteps === 2 && !progress.step2) return json({ success: false, error: "Step 2 not completed" }, 403, request);
+    if (flow) adSteps = clampAdSteps(flow.ad_steps || 1);
+    for (let i = 1; i <= adSteps; i++) {
+      if (!progress[`step${i}`]) return json({ success: false, error: `Step ${i} not completed` }, 403, request);
+    }
 
     const now = Math.floor(Date.now() / 1000);
     await recordAdsComplete(env, settings.user_id, "shorturl", item.item_id || id, item.name || `ShortUrl ${id}`, now);
@@ -2226,67 +2226,45 @@ async function handleRequest(request, env, ctx) {
     let flowId   = url.searchParams.get("flow");
     const keyId  = url.searchParams.get("id") || url.searchParams.get("key_id");
     if (!domain) return json({ success: false, error: "Missing domain" }, 400, request);
-
-    const settings = await env.DB.prepare("SELECT * FROM user_settings WHERE website_domain = ?")
-      .bind(domain).first();
-
-    if (!settings)
-      return json({ success: false, error: "Settings not found" }, 404, request);
-
+    const settings = await env.DB.prepare("SELECT * FROM user_settings WHERE website_domain = ?").bind(domain).first();
+    if (!settings) return json({ success: false, error: "Settings not found" }, 404, request);
     let keyItem = null;
     if (keyId) {
-      keyItem = await env.DB.prepare(`
-        SELECT item_id AS id, name, flow_id, key_duration
-        FROM key_links
-        WHERE user_id = ? AND item_id = ?
-      `).bind(settings.user_id, keyId).first();
+      keyItem = await env.DB.prepare(`SELECT item_id AS id, name, flow_id, key_duration FROM key_links WHERE user_id = ? AND item_id = ?`).bind(settings.user_id, keyId).first();
       if (!keyItem) return json({ success: false, error: "key_link_not_found" }, 404, request);
       flowId = keyItem.flow_id;
     }
-
     const sys = await env.DB.prepare("SELECT * FROM system_settings WHERE id = 1").first();
-
     let flowSettings = {};
     if (flowId) {
-      const flow = await env.DB.prepare("SELECT * FROM user_flows WHERE user_id = ? AND flow_id = ?")
-        .bind(settings.user_id, flowId).first();
+      const flow = await env.DB.prepare("SELECT * FROM user_flows WHERE user_id = ? AND flow_id = ?").bind(settings.user_id, flowId).first();
       if (flow) {
-        flowSettings = {
-          ad_steps:       flow.ad_steps,
-          step1_type:     flow.step1_type,
-          step1_link:     flow.step1_link,
-          step1_yt_links: flow.step1_yt_links,
-          step2_type:     flow.step2_type,
-          step2_link:     flow.step2_link,
-          step2_yt_links: flow.step2_yt_links,
-          flow_id:        String(flowId),
-        };
-      } else if (keyId) {
-        return json({ success: false, error: "flow_not_found" }, 404, request);
-      }
+        flowSettings = { ad_steps: clampAdSteps(flow.ad_steps), flow_id: String(flowId) };
+        for (let i = 1; i <= MAX_FLOW_STEPS; i++) {
+          flowSettings[`step${i}_type`] = stepTypeValue(flow, i);
+          flowSettings[`step${i}_link`] = stepValue(flow, i, 'link', '');
+          flowSettings[`step${i}_yt_links`] = stepValue(flow, i, 'yt_links', '[]');
+        }
+      } else if (keyId) return json({ success: false, error: "flow_not_found" }, 404, request);
     }
-
-    return json({
-      success: true,
-      settings: {
-        website_domain:    settings.website_domain,
-        key_domain:        settings.key_domain,
-        ad_steps:          settings.ad_steps,
-        step1_type:        settings.step1_type,
-        step1_link:        settings.step1_link,
-        step1_yt_links:    settings.step1_yt_links,
-        step2_type:        settings.step2_type,
-        step2_link:        settings.step2_link,
-        step2_yt_links:    settings.step2_yt_links,
-        captcha_type:      settings.captcha_type || "text",
-        ...flowSettings,
-        key_item:          keyItem,
-        key_duration:      keyItem ? safeKeyDuration(keyItem.key_duration) : undefined,
-        start_link:        sys?.start_link     || env.SYSTEM_START_LINK || "",
-        start_type:        sys?.start_type     || "linkvertise",
-        start_yt_links:    sys?.start_yt_links || "[]",
-      },
-    }, request);
+    const outSettings = {
+      website_domain: settings.website_domain,
+      key_domain: settings.key_domain,
+      ad_steps: clampAdSteps(settings.ad_steps),
+      captcha_type: settings.captcha_type || "text",
+      key_item: keyItem,
+      key_duration: keyItem ? safeKeyDuration(keyItem.key_duration) : undefined,
+      start_link: sys?.start_link || env.SYSTEM_START_LINK || "",
+      start_type: sys?.start_type || "linkvertise",
+      start_yt_links: sys?.start_yt_links || "[]",
+    };
+    for (let i = 1; i <= MAX_FLOW_STEPS; i++) {
+      outSettings[`step${i}_type`] = stepTypeValue(settings, i);
+      outSettings[`step${i}_link`] = stepValue(settings, i, 'link', '');
+      outSettings[`step${i}_yt_links`] = stepValue(settings, i, 'yt_links', '[]');
+    }
+    Object.assign(outSettings, flowSettings);
+    return json({ success: true, settings: outSettings }, request);
   }
 
   if (type === "change_username") {
