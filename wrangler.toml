@@ -1,4 +1,4 @@
-name = "api-shop"
+name = "shop-api"
 main = "api.js"
 compatibility_date = "2025-12-01"
 
