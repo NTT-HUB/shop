@@ -2053,6 +2053,111 @@ async function handleRequest(request, env, ctx) {
     }, request);
   }
 
+
+  if (type === "get_ads_platform_settings") {
+    const userId = url.searchParams.get("user_id");
+    if (!userId) return json({ success: false, error: "Missing user_id" }, 400, request);
+
+    const auth = await requireAuthUser(request, userId);
+    if (auth.response) return auth.response;
+
+    let row = await env.DB.prepare(
+      "SELECT website_domain, linkvertise_token, lootlabs_api_token, lootlabs_base_link FROM user_settings WHERE user_id = ?"
+    ).bind(userId).first();
+
+    if (!row) {
+      const user = await env.DB.prepare("SELECT username FROM users WHERE id = ?").bind(userId).first();
+      const now = Math.floor(Date.now() / 1000);
+      const defaultDomain = (user?.username || ("user" + userId))
+        .toLowerCase()
+        .replace(/\s+/g, "-")
+        .replace(/[^a-z0-9\-]/g, "")
+        .slice(0, 15) || ("user" + userId);
+
+      await env.DB.prepare(`
+        INSERT INTO user_settings
+          (user_id, website_domain, key_domain, encode_key, linkvertise_token, lootlabs_api_token, lootlabs_base_link, discord_webhook, ad_steps, step1_link, step2_link, created_at, updated_at)
+        VALUES (?, ?, 'KEY', 'ntt-hub', '', '', '', '', 1, '', '', ?, ?)
+        ON CONFLICT(user_id) DO NOTHING
+      `).bind(userId, defaultDomain, now, now).run();
+
+      row = await env.DB.prepare(
+        "SELECT website_domain, linkvertise_token, lootlabs_api_token, lootlabs_base_link FROM user_settings WHERE user_id = ?"
+      ).bind(userId).first();
+    }
+
+    return json({
+      success: true,
+      settings: {
+        website_domain: row?.website_domain || "",
+        linkvertise_token: row?.linkvertise_token || "",
+        lootlabs_api_token: row?.lootlabs_api_token || "",
+        lootlabs_base_link: row?.lootlabs_base_link || "",
+      }
+    }, request);
+  }
+
+  if (type === "save_ads_platform_settings") {
+    let body;
+    try { body = await request.json(); }
+    catch { return json({ success: false, error: "Invalid JSON" }, 400, request); }
+
+    const userId = body.user_id;
+    if (!userId) return json({ success: false, error: "Missing user_id" }, 400, request);
+
+    const auth = await requireAuthUser(request, userId);
+    if (auth.response) return auth.response;
+
+    const linkvertiseToken = String(body.linkvertise_token || "").trim();
+    const lootToken = String(body.lootlabs_api_token || "").replace(/\s+/g, "").trim();
+    const lootBase = String(body.lootlabs_base_link || "").trim();
+
+    if (lootToken.length > 300) return json({ success: false, error: "LootLabs API token too long" }, 400, request);
+    if (lootBase && !/^https?:\/\//i.test(lootBase)) return json({ success: false, error: "LootLabs Base Link must start with http:// or https://" }, 400, request);
+
+    const now = Math.floor(Date.now() / 1000);
+
+    const existing = await env.DB.prepare("SELECT user_id FROM user_settings WHERE user_id = ?").bind(userId).first();
+
+    if (existing) {
+      await env.DB.prepare(`
+        UPDATE user_settings
+        SET linkvertise_token = ?,
+            lootlabs_api_token = ?,
+            lootlabs_base_link = ?,
+            updated_at = ?
+        WHERE user_id = ?
+      `).bind(linkvertiseToken, lootToken, lootBase, now, userId).run();
+    } else {
+      const user = await env.DB.prepare("SELECT username FROM users WHERE id = ?").bind(userId).first();
+      const defaultDomain = (user?.username || ("user" + userId))
+        .toLowerCase()
+        .replace(/\s+/g, "-")
+        .replace(/[^a-z0-9\-]/g, "")
+        .slice(0, 15) || ("user" + userId);
+
+      await env.DB.prepare(`
+        INSERT INTO user_settings
+          (user_id, website_domain, key_domain, encode_key, linkvertise_token, lootlabs_api_token, lootlabs_base_link, discord_webhook, ad_steps, step1_link, step2_link, created_at, updated_at)
+        VALUES (?, ?, 'KEY', 'ntt-hub', ?, ?, ?, '', 1, '', '', ?, ?)
+      `).bind(userId, defaultDomain, linkvertiseToken, lootToken, lootBase, now, now).run();
+    }
+
+    const row = await env.DB.prepare(
+      "SELECT linkvertise_token, lootlabs_api_token, lootlabs_base_link FROM user_settings WHERE user_id = ?"
+    ).bind(userId).first();
+
+    return json({
+      success: true,
+      message: "Ads platform settings saved",
+      settings: {
+        linkvertise_token: row?.linkvertise_token || "",
+        lootlabs_api_token: row?.lootlabs_api_token || "",
+        lootlabs_base_link: row?.lootlabs_base_link || "",
+      }
+    }, request);
+  }
+
   if (type === "save_settings") {
     let body;
     try { body = await request.json(); }
