@@ -2054,7 +2054,7 @@ async function handleRequest(request, env, ctx) {
   }
 
 
-  if (type === "get_ads_platform_settings") {
+  if (type === "get_ads_platform_settings" || (type === "platform_settings" && request.method === "GET")) {
     const userId = url.searchParams.get("user_id");
     if (!userId) return json({ success: false, error: "Missing user_id" }, 400, request);
 
@@ -2097,7 +2097,7 @@ async function handleRequest(request, env, ctx) {
     }, request);
   }
 
-  if (type === "save_ads_platform_settings") {
+  if (type === "save_ads_platform_settings" || (type === "platform_settings" && request.method === "POST")) {
     let body;
     try { body = await request.json(); }
     catch { return json({ success: false, error: "Invalid JSON" }, 400, request); }
