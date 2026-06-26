@@ -1327,14 +1327,13 @@ async function handleRequest(request, env, ctx) {
     const col = step === 1 ? "step1_start_at" : step === 2 ? "step2_start_at" : null;
     if (!col) return json({ success: false, error: "Invalid step" }, 400, request);
 
-    // Upsert row nếu chưa có
-    const existing = await env.DB.prepare("SELECT hwid FROM progress WHERE hwid = ? AND flow_id = ?").bind(hwid, flowKey).first();
-    if (!existing) {
-      const defaultP = await env.DB.prepare("SELECT created_at FROM progress WHERE hwid = ? AND flow_id = 'default'").bind(hwid).first();
-      const initTime = defaultP?.created_at || now;
-      await env.DB.prepare(
-        "INSERT INTO progress (hwid, ostime, start, step1, step2, created_at, flow_id) VALUES (?, ?, 0, 0, 0, ?, ?)"
-      ).bind(hwid, now, initTime, flowKey).run();
+    // User phải bấm Start và pass captcha trước khi bắt đầu Step 1/2.
+    const existing = await env.DB.prepare("SELECT start, step1 FROM progress WHERE hwid = ? AND flow_id = ?").bind(hwid, flowKey).first();
+    if (!existing || !existing.start) {
+      return json({ success: false, error: "start_required", message: "Please complete captcha first" }, 403, request);
+    }
+    if (step === 2 && !existing.step1) {
+      return json({ success: false, error: "step1_required", message: "Please complete step 1 first" }, 403, request);
     }
 
     await env.DB.prepare(`UPDATE progress SET ${col} = ? WHERE hwid = ? AND flow_id = ?`).bind(now, hwid, flowKey).run();
@@ -1528,15 +1527,8 @@ async function handleRequest(request, env, ctx) {
       : 25;
 
     if (step === "start") {
-      const sys = await env.DB.prepare("SELECT * FROM system_settings WHERE id = 1").first();
-      const sysType = sys?.start_type || "linkvertise";
-      // Linkvertise start bắt buộc phải qua anti-bypass hash của Linkvertise.
-      if (sysType === "linkvertise") {
-        if (!sys?.linkvertise_token?.trim()) return json({ success: false, error: "missing_linkvertise_token" }, 403, request);
-        if (!hash || hash.length < 10) return json({ success: false, error: "missing_hash" }, 403, request);
-        const valid = await checkLinkvertiseHash(hash, sys.linkvertise_token, ua);
-        if (!valid) return json({ success: false, error: "invalid_hash" }, 403, request);
-      }
+      // Start không còn là bước ads/admin nữa.
+      // Chỉ cần captcha_token đã được verify ở captcha_verify.
     } else if (stepType === "linkvertise") {
       // Linkvertise step bắt buộc có token + hash hợp lệ, không fallback qua timer.
       if (!userSettings.linkvertise_token?.trim()) return json({ success: false, error: "missing_linkvertise_token" }, 403, request);
@@ -1556,6 +1548,14 @@ async function handleRequest(request, env, ctx) {
         "INSERT INTO progress (hwid, ostime, start, step1, step2, created_at, flow_id) VALUES (?, ?, 0, 0, 0, ?, ?)"
       ).bind(hwid, now, initTime, flowKey).run();
       progress = { created_at: initTime, start: 0, step1: 0, step2: 0 };
+    }
+
+    // User phải pass captcha Start trước khi hoàn tất Step 1/2.
+    if ((step === 1 || step === 2) && !progress.start) {
+      return json({ success: false, error: "start_required", message: "Please complete captcha first" }, 403, request);
+    }
+    if (step === 2 && !progress.step1) {
+      return json({ success: false, error: "step1_required", message: "Please complete step 1 first" }, 403, request);
     }
 
     // Bypass check dùng step_start_at (lúc user bấm nút)
