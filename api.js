@@ -793,6 +793,87 @@ function isHttpUrl(s) {
   } catch { return false; }
 }
 
+function randomHex(bytes = 24) {
+  const arr = new Uint8Array(bytes);
+  crypto.getRandomValues(arr);
+  return [...arr].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+function safeLootlabsToken(token) {
+  const t = String(token || "").trim();
+  return /^[a-f0-9]{64}$/i.test(t) ? t : "";
+}
+function normalizeLootlabsBaseLink(link) {
+  const l = String(link || "").trim();
+  if (!isHttpUrl(l)) return "";
+  return l;
+}
+function appendLootlabsData(baseLink, encrypted) {
+  const sep = baseLink.includes("?") ? "&" : "?";
+  return `${baseLink}${sep}data=${encrypted}`;
+}
+function resolveCallbackBase(request, callbackBase) {
+  const raw = String(callbackBase || "").trim();
+  if (isHttpUrl(raw)) return raw.replace(/\/+$/, "");
+
+  const req = new URL(request.url);
+  const origin = req.origin
+    .replace("https://api.", "https://")
+    .replace("http://api.", "http://");
+  return `${origin}/callback`;
+}
+async function encryptLootlabsDestination(destinationUrl, apiToken) {
+  const endpoint = "https://creators.lootlabs.gg/api/public/url_encryptor";
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiToken}`,
+    },
+    body: JSON.stringify({ destination_url: destinationUrl, api_token: apiToken }),
+  });
+  let data = null;
+  try { data = await res.json(); } catch {}
+  if (!res.ok || !data || data.type === "error" || !data.message) {
+    throw new Error(data?.message || `LootLabs encrypt failed (${res.status})`);
+  }
+  return String(data.message);
+}
+async function buildLootlabsAutoUrl(env, request, settings, opts) {
+  const apiToken = safeLootlabsToken(settings.lootlabs_api_token || "");
+  const baseLink = normalizeLootlabsBaseLink(settings.lootlabs_base_link || "");
+  if (!apiToken) throw new Error("missing_lootlabs_api_token");
+  if (!baseLink) throw new Error("missing_lootlabs_base_link");
+
+  const now = Math.floor(Date.now() / 1000);
+  const state = randomHex(32);
+  const callbackBase = resolveCallbackBase(request, opts.callback_base);
+  const destination = `${callbackBase}?state=${encodeURIComponent(state)}`;
+
+  await env.DB.prepare(`
+    INSERT INTO step_attempts
+      (state, hwid, domain, flow_id, step, item_type, item_id, created_at, expires_at, used)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+  `).bind(
+    state,
+    opts.hwid,
+    opts.domain,
+    String(opts.flow_id || "default"),
+    Number(opts.step),
+    opts.item_type || "",
+    String(opts.item_id || ""),
+    now,
+    now + 15 * 60,
+  ).run();
+
+  try {
+    const encrypted = await encryptLootlabsDestination(destination, apiToken);
+    return { state, url: appendLootlabsData(baseLink, encrypted) };
+  } catch (e) {
+    try { await env.DB.prepare("DELETE FROM step_attempts WHERE state = ?").bind(state).run(); } catch {}
+    throw e;
+  }
+}
+
 
 async function recordAdsComplete(env, userId, itemType, itemId, itemName, now) {
   try {
@@ -1345,7 +1426,7 @@ async function handleRequest(request, env, ctx) {
     try { body = await request.json(); }
     catch { return json({ success: false, error: "Invalid JSON" }, 400, request); }
 
-    let { hwid, step, flow_id } = body;
+    let { hwid, step, flow_id, domain, key_id, shorturl_id, callback_base } = body;
     if (hwid) hwid = hwid.replace(/ /g, "+");
     const stepNum = Number(step);
     if (!hwid || !Number.isInteger(stepNum) || stepNum < 1 || stepNum > MAX_FLOW_STEPS)
@@ -1365,7 +1446,38 @@ async function handleRequest(request, env, ctx) {
 
     await env.DB.prepare(`UPDATE progress SET ${col} = ? WHERE hwid = ? AND flow_id = ?`).bind(now, hwid, flowKey).run();
 
-    return json({ success: true });
+    // LootLabs Anti Bypass: tạo link riêng cho lượt click này bằng state một lần dùng.
+    if (domain) {
+      try {
+        const settings = await env.DB.prepare("SELECT * FROM user_settings WHERE website_domain = ?").bind(domain).first();
+        if (settings) {
+          let stepType = stepTypeValue(settings, stepNum);
+          if (flowKey !== "default") {
+            const flowRow = await env.DB.prepare("SELECT * FROM user_flows WHERE user_id = ? AND flow_id = ?")
+              .bind(settings.user_id, flowKey).first();
+            if (flowRow) stepType = stepTypeValue(flowRow, stepNum);
+          }
+          if (stepType === "lootlabs_auto") {
+            const itemType = shorturl_id ? "shorturl" : key_id ? "key" : "";
+            const itemId = shorturl_id || key_id || "";
+            const made = await buildLootlabsAutoUrl(env, request, settings, {
+              hwid,
+              domain,
+              flow_id: flowKey,
+              step: stepNum,
+              item_type: itemType,
+              item_id: itemId,
+              callback_base,
+            });
+            return json({ success: true, platform: "lootlabs_auto", url: made.url, state: made.state }, request);
+          }
+        }
+      } catch (e) {
+        return json({ success: false, error: "lootlabs_create_failed", message: e?.message || "LootLabs create failed" }, 502, request);
+      }
+    }
+
+    return json({ success: true }, request);
   }
 
   if (type === "save_captcha_type") {
@@ -1490,7 +1602,22 @@ async function handleRequest(request, env, ctx) {
     try { body = await request.json(); }
     catch { return json({ success: false, error: "Invalid JSON" }, 400, request); }
 
-    let { hwid, step, hash, domain, flow_id, key_id, shorturl_id, captcha_token } = body;
+    let { hwid, step, hash, domain, flow_id, key_id, shorturl_id, captcha_token, state } = body;
+    let stateAttempt = null;
+    if (state) {
+      const nowState = Math.floor(Date.now() / 1000);
+      stateAttempt = await env.DB.prepare("SELECT * FROM step_attempts WHERE state = ?").bind(String(state)).first();
+      if (!stateAttempt) return json({ success: false, error: "invalid_state" }, 403, request);
+      if (stateAttempt.used) return json({ success: false, error: "state_used" }, 403, request);
+      if (Number(stateAttempt.expires_at || 0) < nowState) return json({ success: false, error: "state_expired" }, 403, request);
+
+      hwid = stateAttempt.hwid;
+      step = Number(stateAttempt.step);
+      domain = stateAttempt.domain;
+      flow_id = stateAttempt.flow_id;
+      if (stateAttempt.item_type === "shorturl") shorturl_id = stateAttempt.item_id;
+      if (stateAttempt.item_type === "key") key_id = stateAttempt.item_id;
+    }
     if (hwid) hwid = hwid.replace(/ /g, "+");
     if (!hwid || !step || !domain) return json({ success: false, error: "Missing params" }, 400, request);
     if (hwid.length > 200) return json({ success: false, error: "Invalid hwid" }, 400, request);
@@ -1535,7 +1662,7 @@ async function handleRequest(request, env, ctx) {
     }
 
     const stepType = isStartStep ? "captcha_start" : (effectiveStepTypes[stepNum] || "linkvertise");
-    const PLATFORM_SECS = (t) => t === "lootlab" ? 60 : t === "workink" ? 30 : t === "youtube" ? 15 : 10;
+    const PLATFORM_SECS = (t) => t === "lootlabs_auto" ? 0 : t === "lootlab" ? 60 : t === "workink" ? 30 : t === "youtube" ? 15 : 10;
     const effectiveBestTimeEnabled = userSettings.best_time_enabled || 0;
 
     if (isStartStep) {
@@ -1545,6 +1672,8 @@ async function handleRequest(request, env, ctx) {
       if (!hash || hash.length < 10) return json({ success: false, error: "missing_hash" }, 403, request);
       const valid = await checkLinkvertiseHash(hash, userSettings.linkvertise_token, ua);
       if (!valid) return json({ success: false, error: "invalid_hash" }, 403, request);
+    } else if (stepType === "lootlabs_auto") {
+      if (!stateAttempt) return json({ success: false, error: "missing_state", message: "LootLabs state is required" }, 403, request);
     }
 
     const now = Math.floor(Date.now() / 1000);
@@ -1569,7 +1698,7 @@ async function handleRequest(request, env, ctx) {
     }
 
     if (!isStartStep) {
-      const hasToken = stepType === "linkvertise" && userSettings.linkvertise_token?.trim();
+      const hasToken = (stepType === "linkvertise" && userSettings.linkvertise_token?.trim()) || (stepType === "lootlabs_auto" && stateAttempt);
       if (!hasToken) {
         const bypassSecs = effectiveBestTimeEnabled === 1 ? PLATFORM_SECS(stepType) : 25;
         const startAt = progressStepStartAt(progress, stepNum);
@@ -1588,7 +1717,20 @@ async function handleRequest(request, env, ctx) {
       await env.DB.prepare(`UPDATE progress SET start = 1, step${stepNum} = 1, step${stepNum}_at = ? WHERE hwid = ? AND flow_id = ?`).bind(now, hwid, flowKey).run();
     }
 
-    return json({ success: true, message: `Step ${step} completed` }, request);
+    let session = null;
+    if (stateAttempt) {
+      await env.DB.prepare("UPDATE step_attempts SET used = 1 WHERE state = ?").bind(stateAttempt.state).run();
+      session = {
+        mode: stateAttempt.item_type === "shorturl" ? "shorturl" : "key",
+        domain: stateAttempt.domain,
+        id: stateAttempt.item_id || "",
+        hwid: stateAttempt.hwid,
+        flow: stateAttempt.flow_id || "default",
+        return_path: stateAttempt.item_type === "shorturl" ? "/shorturl" : "/key",
+      };
+    }
+
+    return json({ success: true, message: `Step ${step} completed`, session }, request);
   }
 
   if (type === "create_key") {
@@ -1642,7 +1784,7 @@ async function handleRequest(request, env, ctx) {
     // ── Best Time Anti-Bypass: tổng thời gian theo số step ads thật ──
     const requiredSteps = clampAdSteps(effectiveSettings.ad_steps);
     if (settings.best_time_enabled === 1) {
-      const PSECS = (t) => t === "lootlab" ? 60 : t === "workink" ? 30 : t === "youtube" ? 15 : 10;
+      const PSECS = (t) => t === "lootlabs_auto" ? 0 : t === "lootlab" ? 60 : t === "workink" ? 30 : t === "youtube" ? 15 : 10;
       let totalRequired = 0;
       for (let i = 1; i <= requiredSteps; i++) totalRequired += PSECS(effectiveSettings[`step${i}_type`] || "linkvertise");
       const elapsed = now - (progress.created_at || now);
@@ -1835,7 +1977,8 @@ async function handleRequest(request, env, ctx) {
 
     const {
       user_id, website_domain, key_domain, encode_key,
-      linkvertise_token, discord_webhook, ad_steps,
+      linkvertise_token, lootlabs_api_token, lootlabs_base_link,
+      discord_webhook, ad_steps,
       step1_link, step2_link, step1_type, step2_type,
       step1_yt_links, step2_yt_links,
     } = body;
@@ -1881,8 +2024,10 @@ async function handleRequest(request, env, ctx) {
     const existing = await env.DB.prepare("SELECT * FROM user_settings WHERE user_id = ?")
       .bind(user_id).first();
 
-    const finalToken     = linkvertise_token !== undefined ? linkvertise_token : (existing?.linkvertise_token || "");
-    const finalWebhook   = discord_webhook   !== undefined ? discord_webhook   : (existing?.discord_webhook   || "");
+    const finalToken     = linkvertise_token    !== undefined ? linkvertise_token    : (existing?.linkvertise_token    || "");
+    const finalLootToken = lootlabs_api_token  !== undefined ? lootlabs_api_token  : (existing?.lootlabs_api_token  || "");
+    const finalLootBase  = lootlabs_base_link  !== undefined ? lootlabs_base_link  : (existing?.lootlabs_base_link  || "");
+    const finalWebhook   = discord_webhook      !== undefined ? discord_webhook      : (existing?.discord_webhook      || "");
     const finalSteps     = ad_steps          !== undefined ? ad_steps          : (existing?.ad_steps          || 1);
     const finalStep1     = step1_link        !== undefined ? step1_link        : (existing?.step1_link        || "");
     const finalStep2     = step2_link        !== undefined ? step2_link        : (existing?.step2_link        || "");
@@ -1893,14 +2038,16 @@ async function handleRequest(request, env, ctx) {
 
     await env.DB.prepare(`
       INSERT INTO user_settings
-        (user_id, website_domain, key_domain, encode_key, linkvertise_token, discord_webhook, ad_steps, step1_link, step2_link, step1_type, step2_type, step1_yt_links, step2_yt_links, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (user_id, website_domain, key_domain, encode_key, linkvertise_token, lootlabs_api_token, lootlabs_base_link, discord_webhook, ad_steps, step1_link, step2_link, step1_type, step2_type, step1_yt_links, step2_yt_links, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(user_id) DO UPDATE SET
-        website_domain    = excluded.website_domain,
-        key_domain        = excluded.key_domain,
-        encode_key        = excluded.encode_key,
-        linkvertise_token = excluded.linkvertise_token,
-        discord_webhook   = excluded.discord_webhook,
+        website_domain       = excluded.website_domain,
+        key_domain           = excluded.key_domain,
+        encode_key           = excluded.encode_key,
+        linkvertise_token    = excluded.linkvertise_token,
+        lootlabs_api_token   = excluded.lootlabs_api_token,
+        lootlabs_base_link   = excluded.lootlabs_base_link,
+        discord_webhook      = excluded.discord_webhook,
         ad_steps          = excluded.ad_steps,
         step1_link        = excluded.step1_link,
         step2_link        = excluded.step2_link,
@@ -1911,7 +2058,7 @@ async function handleRequest(request, env, ctx) {
         updated_at        = excluded.updated_at
     `).bind(
       user_id, finalDomain, finalKeyDomain, finalEncodeKey,
-      finalToken, finalWebhook, finalSteps,
+      finalToken, finalLootToken, finalLootBase, finalWebhook, finalSteps,
       finalStep1, finalStep2, finalStep1Type, finalStep2Type,
       finalStep1Yt, finalStep2Yt, now, now,
     ).run();
