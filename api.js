@@ -799,8 +799,10 @@ function randomHex(bytes = 24) {
   return [...arr].map(b => b.toString(16).padStart(2, "0")).join("");
 }
 function safeLootlabsToken(token) {
-  const t = String(token || "").trim();
-  return /^[a-f0-9]{64}$/i.test(t) ? t : "";
+  // LootLabs docs list a 64-char hex token, but do not hard-block here.
+  // Strip copied whitespace/newlines and let LootLabs validate the token.
+  const t = String(token || "").replace(/\s+/g, "").trim();
+  return t.length >= 16 && t.length <= 200 ? t : "";
 }
 function normalizeLootlabsBaseLink(link) {
   const l = String(link || "").trim();
@@ -823,20 +825,41 @@ function resolveCallbackBase(request, callbackBase) {
 }
 async function encryptLootlabsDestination(destinationUrl, apiToken) {
   const endpoint = "https://creators.lootlabs.gg/api/public/url_encryptor";
-  const res = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiToken}`,
-    },
-    body: JSON.stringify({ destination_url: destinationUrl, api_token: apiToken }),
-  });
-  let data = null;
-  try { data = await res.json(); } catch {}
-  if (!res.ok || !data || data.type === "error" || !data.message) {
+
+  const parse = async (res) => {
+    let data = null;
+    try { data = await res.json(); } catch {}
+    if (res.ok && data && data.type !== "error" && data.message) return String(data.message);
     throw new Error(data?.message || `LootLabs encrypt failed (${res.status})`);
+  };
+
+  // Official docs show POST with Bearer Authorization and destination_url in body.
+  try {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiToken}`,
+      },
+      body: JSON.stringify({ destination_url: destinationUrl }),
+    });
+    return await parse(res);
+  } catch (firstErr) {
+    // Some docs/table versions also mention api_token in body; try that as fallback.
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ destination_url: destinationUrl, api_token: apiToken }),
+      });
+      return await parse(res);
+    } catch (secondErr) {
+      // Last fallback: GET query form from the docs.
+      const getUrl = `${endpoint}?destination_url=${encodeURIComponent(destinationUrl)}&api_token=${encodeURIComponent(apiToken)}`;
+      const res = await fetch(getUrl, { method: "GET" });
+      return await parse(res);
+    }
   }
-  return String(data.message);
 }
 async function buildLootlabsAutoUrl(env, request, settings, opts) {
   const apiToken = safeLootlabsToken(settings.lootlabs_api_token || "");
@@ -2025,8 +2048,8 @@ async function handleRequest(request, env, ctx) {
       .bind(user_id).first();
 
     const finalToken     = linkvertise_token    !== undefined ? linkvertise_token    : (existing?.linkvertise_token    || "");
-    const finalLootToken = lootlabs_api_token  !== undefined ? lootlabs_api_token  : (existing?.lootlabs_api_token  || "");
-    const finalLootBase  = lootlabs_base_link  !== undefined ? lootlabs_base_link  : (existing?.lootlabs_base_link  || "");
+    const finalLootToken = lootlabs_api_token  !== undefined ? String(lootlabs_api_token || "").replace(/\s+/g, "").trim() : (existing?.lootlabs_api_token  || "");
+    const finalLootBase  = lootlabs_base_link  !== undefined ? String(lootlabs_base_link || "").trim() : (existing?.lootlabs_base_link  || "");
     const finalWebhook   = discord_webhook      !== undefined ? discord_webhook      : (existing?.discord_webhook      || "");
     const finalSteps     = ad_steps          !== undefined ? ad_steps          : (existing?.ad_steps          || 1);
     const finalStep1     = step1_link        !== undefined ? step1_link        : (existing?.step1_link        || "");
