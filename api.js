@@ -777,6 +777,25 @@ function isHttpUrl(s) {
   } catch { return false; }
 }
 
+
+async function recordAdsComplete(env, userId, itemType, itemId, itemName, now) {
+  try {
+    const dayTs = now - (now % 86400);
+    const safeType = itemType === "shorturl" ? "shorturl" : "key";
+    const safeId = String(itemId || "default").slice(0, 64);
+    const fallbackName = safeType === "shorturl" ? `ShortUrl ${safeId}` : `Key ${safeId}`;
+    const safeName = String(itemName || fallbackName).slice(0, 100);
+
+    await env.DB.prepare(`
+      INSERT INTO ads_daily_stats (user_id, day_ts, item_type, item_id, item_name, count)
+      VALUES (?, ?, ?, ?, ?, 1)
+      ON CONFLICT(user_id, day_ts, item_type, item_id) DO UPDATE SET
+        count     = count + 1,
+        item_name = excluded.item_name
+    `).bind(userId, dayTs, safeType, safeId, safeName).run();
+  } catch {}
+}
+
 export default {
   async fetch(request, env, ctx) {
     try { return await handleRequest(request, env, ctx); }
@@ -1683,6 +1702,15 @@ async function handleRequest(request, env, ctx) {
       `).bind(settings.user_id, dayTs, flowKey, flowNameForStat).run();
     } catch {}
 
+    await recordAdsComplete(
+      env,
+      settings.user_id,
+      "key",
+      keyItem?.item_id || key_id || flowKey,
+      keyItem?.name || (key_id ? `Key ${key_id}` : `Flow ${flowKey}`),
+      now
+    );
+
     const updatedSettings = await env.DB.prepare(
       "SELECT total_keys, discord_webhook FROM user_settings WHERE website_domain = ?"
     ).bind(domain).first();
@@ -2186,6 +2214,9 @@ async function handleRequest(request, env, ctx) {
     if (flow) adSteps = Number(flow.ad_steps || 1);
     if (adSteps === 2 && !progress.step2) return json({ success: false, error: "Step 2 not completed" }, 403, request);
 
+    const now = Math.floor(Date.now() / 1000);
+    await recordAdsComplete(env, settings.user_id, "shorturl", item.item_id || id, item.name || `ShortUrl ${id}`, now);
+
     await env.DB.prepare("DELETE FROM progress WHERE hwid = ? AND flow_id = ?").bind(hwid, flowKey).run();
     return json({ success: true, final_url: item.final_url }, request);
   }
@@ -2340,6 +2371,44 @@ async function handleRequest(request, env, ctx) {
       }, request);
     } catch {
       return json({ success: true, total_keys: 0, total_users: 0 }, request);
+    }
+  }
+
+  if (type === "get_ads_stats") {
+    const userId = url.searchParams.get("user_id");
+    if (!userId) return json({ success: false, error: "Missing user_id" }, 400, request);
+
+    const authHeader = request.headers.get('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer '))
+      return json({ success: false, error: 'Unauthorized' }, 401, request);
+    const authPayload = await verifyToken(authHeader.slice(7));
+    if (!authPayload)
+      return json({ success: false, error: 'Invalid or expired token' }, 401, request);
+    if (String(authPayload.userId) !== String(userId))
+      return json({ success: false, error: 'Forbidden' }, 403, request);
+
+    const now     = Math.floor(Date.now() / 1000);
+    const todayTs = now - (now % 86400);
+
+    try {
+      await env.DB.prepare("DELETE FROM ads_daily_stats WHERE user_id = ? AND day_ts < ?")
+        .bind(userId, todayTs - 31 * 86400).run();
+    } catch {}
+
+    const since7 = todayTs - 6 * 86400;
+    try {
+      const rows = await env.DB.prepare(
+        "SELECT day_ts, item_type, item_id, item_name, count FROM ads_daily_stats WHERE user_id = ? AND day_ts >= ? ORDER BY day_ts ASC, item_type ASC, item_id ASC"
+      ).bind(userId, since7).all();
+
+      const totalRow = await env.DB.prepare(
+        "SELECT COALESCE(SUM(count), 0) AS total FROM ads_daily_stats WHERE user_id = ?"
+      ).bind(userId).first();
+
+      const total7 = (rows.results || []).reduce((s, r) => s + (r.count || 0), 0);
+      return json({ success: true, rows: rows.results || [], total7, total_all: totalRow?.total || 0 }, request);
+    } catch (e) {
+      return json({ success: false, error: "ads_stats_table_missing", message: "Run the ads_daily_stats SQL migration." }, 500, request);
     }
   }
 
